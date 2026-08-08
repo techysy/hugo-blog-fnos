@@ -9,6 +9,6 @@ maintainer_url        = https://github.com/techysy
 distributor           = techysy
 distributor_url       = https://github.com/techysy/hugo-blog-fnos
 desktop_uidir         = ui
-desktop_applaunchname = hugoblog.Application
+desktop_applaunchname = hugo-blog.Application
 service_port          = 1313
 ctl_stop              = true
