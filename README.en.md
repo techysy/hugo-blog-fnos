@@ -17,7 +17,7 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 
 - 📝 **Auto-render on write** — drop markdown into `content/post/` and Hugo regenerates the site
 - 🚀 **Zero-dependency** — single Hugo binary, no Node/Python runtime needed
-- 🗄️ **Persistent data** — blog source at `/vol4/@appdata/hugo-blog/`, writable and backup-able
+- 🗄️ **Persistent data** — blog source at `/vol4/@appshare/hugo-blog/`, writable and backup-able
 - 🔄 **App Center managed** — start/stop, auto-start on boot, status
 - 🌐 **One-click access** — desktop icon opens the blog
 
@@ -49,13 +49,13 @@ Save and Hugo **re-renders automatically**; refresh the browser to see it.
 
 | Item | Value |
 |---|---|
-| Blog source | `/vol4/@appdata/hugo-blog/blog/` |
-| content | `/vol4/@appdata/hugo-blog/blog/content/` |
+| Blog source | `/vol4/@appshare/hugo-blog/blog/` |
+| content | `/vol4/@appshare/hugo-blog/blog/content/` |
 | Port | `1313` |
 
 ### Change theme
 
-Put a theme in `/vol4/@appdata/hugo-blog/blog/themes/<name>/` and set `theme = "<name>"` in `config/_default/config.toml`.
+Put a theme in `/vol4/@appshare/hugo-blog/blog/themes/<name>/` and set `theme = "<name>"` in `config/_default/config.toml`.
 
 ## 🐛 Troubleshooting
 

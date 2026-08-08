@@ -17,7 +17,7 @@ Hugo 静态博客 — 常驻渲染服务，在飞牛 NAS (fnOS) 上写文章自�
 
 - 📝 **写文章自动渲染** — 在数据目录的 `content/post/` 放 markdown，Hugo 自动生成站点
 - 🚀 **零依赖** — Hugo 单二进制，无需 Node/Python 运行时
-- 🗄️ **数据持久化** — 博客源在 `/vol4/@appdata/hugo-blog/`，可写、可备份
+- 🗄️ **数据持久化** — 博客源在 `/vol4/@appshare/hugo-blog/`，可写、可备份
 - 🔄 **App Center 管理** — 启停、开机自启、状态查看
 - 🌐 **一键访问** — 桌面图标打开博客
 
@@ -49,13 +49,13 @@ tags: [hugo, fnos]
 
 | 项 | 值 |
 |---|---|
-| 博客源 | `/vol4/@appdata/hugo-blog/blog/` |
-| content | `/vol4/@appdata/hugo-blog/blog/content/` |
+| 博客源 | `/vol4/@appshare/hugo-blog/blog/` |
+| content | `/vol4/@appshare/hugo-blog/blog/content/` |
 | 端口 | `1313` |
 
 ### 换主题
 
-把主题放到 `/vol4/@appdata/hugo-blog/blog/themes/<name>/`，并在 `config/_default/config.toml` 改 `theme = "<name>"`。
+把主题放到 `/vol4/@appshare/hugo-blog/blog/themes/<name>/`，并在 `config/_default/config.toml` 改 `theme = "<name>"`。
 
 ## 🐛 问题排查
 
