@@ -1,26 +1,19 @@
 {
     "data-share":
     {
-        "shares":
-        [
+        "shares": [
             {
                 "name": "hugo-blog",
                 "permission":
                 {
-                    "rw":
-                    [
-                        "hugo-blog"
-                    ]
+                    "rw": ["hugo-blog"]
                 }
             },
             {
                 "name": "hugo-blog/data",
                 "permission":
                 {
-                    "rw":
-                    [
-                        "hugo-blog"
-                    ]
+                    "rw": ["hugo-blog"]
                 }
             }
         ]
