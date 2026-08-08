@@ -25,7 +25,7 @@ Hugo 静态博客 — 常驻渲染服务，在飞牛 NAS (fnOS) 上写文章自�
 
 1. 从 [Releases](https://github.com/techysy/hugo-blog-fnos/releases) 下载 `hugo-blog-x.x.x.fpk`
 2. 飞牛 **App Center → 手动安装** → 选择 fpk
-3. 桌面出现 **Hugo Blog** 图标，点击打开博客（端口 `1313`）
+3. 桌面出现 **Hugo Blog** 图标，点击打开博客（端口 `13133`）
 
 ## 📖 使用说明
 
@@ -51,7 +51,7 @@ tags: [hugo, fnos]
 |---|---|
 | 博客源 | `/vol4/@appshare/hugo-blog/blog/` |
 | content | `/vol4/@appshare/hugo-blog/blog/content/` |
-| 端口 | `1313` |
+| 端口 | `13133` |
 
 ### 换主题
 

@@ -4,7 +4,7 @@ set -uo pipefail
 APP_NAME="${TRIM_APPNAME:-hugo-blog}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
 DATA_DIR="${TRIM_PKGVAR:-/vol4/@appshare/${APP_NAME}}"
-PORT="${TRIM_SERVICE_PORT:-1313}"
+PORT="${TRIM_SERVICE_PORT:-13133}"
 LOG="${DATA_DIR}/hugo.log"
 PID_FILE="${DATA_DIR}/hugo.pid"
 

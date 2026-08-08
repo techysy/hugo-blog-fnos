@@ -25,7 +25,7 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 
 1. Download `hugo-blog-x.x.x.fpk` from [Releases](https://github.com/techysy/hugo-blog-fnos/releases)
 2. fnOS **App Center → Manual install** → select the fpk
-3. Open the **Hugo Blog** desktop icon (port `1313`)
+3. Open the **Hugo Blog** desktop icon (port `13133`)
 
 ## 📖 Usage
 
@@ -51,7 +51,7 @@ Save and Hugo **re-renders automatically**; refresh the browser to see it.
 |---|---|
 | Blog source | `/vol4/@appshare/hugo-blog/blog/` |
 | content | `/vol4/@appshare/hugo-blog/blog/content/` |
-| Port | `1313` |
+| Port | `13133` |
 
 ### Change theme
 
