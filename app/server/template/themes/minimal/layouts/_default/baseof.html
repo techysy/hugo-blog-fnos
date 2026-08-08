@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="{{ site.Language.Locale }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ block "title" . }}{{ .Site.Title }}{{ end }}</title>
+  <style>
+    body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;max-width:760px;margin:0 auto;padding:20px;line-height:1.7;color:#222;background:#fff}
+    header.site{margin-bottom:30px;border-bottom:1px solid #eee;padding-bottom:12px}
+    header.site a{color:#333;text-decoration:none;font-size:20px;font-weight:700}
+    nav a{margin-right:14px;color:#0366d6;text-decoration:none;font-size:14px}
+    article.post{margin-bottom:28px}
+    article.post h2{margin:0 0 4px}
+    article.post h2 a{color:#0366d6;text-decoration:none}
+    .meta{color:#888;font-size:13px}
+    footer.site{margin-top:40px;border-top:1px solid #eee;padding-top:12px;color:#888;font-size:13px}
+    code{background:#f6f8fa;padding:2px 5px;border-radius:4px;font-size:90%}
+    pre code{display:block;overflow-x:auto}
+  </style>
+</head>
+<body>
+  <header class="site">
+    <a href="{{ .Site.BaseURL }}">{{ .Site.Title }}</a>
+    {{ with .Site.Menus.main }}
+    <nav>
+      {{ range . }}<a href="{{ .URL }}">{{ .Name }}</a>{{ end }}
+    </nav>
+    {{ end }}
+  </header>
+  <main>{{ block "main" . }}{{ end }}</main>
+  <footer class="site">
+    © {{ now.Format "2006" }} {{ .Site.Title }} · Powered by Hugo
+  </footer>
+</body>
+</html>

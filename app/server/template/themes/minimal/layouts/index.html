@@ -1,0 +1,12 @@
+{{ define "main" }}
+<h1>最新文章</h1>
+{{ range where .Site.RegularPages "Section" "post" }}
+<article class="post">
+  <h2><a href="{{ .RelPermalink }}">{{ .Title }}</a></h2>
+  <div class="meta">{{ .Date.Format "2006-01-02" }}</div>
+  {{ with .Summary }}<p>{{ . }}</p>{{ end }}
+</article>
+{{ else }}
+<p>暂无文章。在 <code>content/post/</code> 目录添加 markdown 文章，Hugo 会自动渲染。</p>
+{{ end }}
+{{ end }}

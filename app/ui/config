@@ -1,0 +1,13 @@
+{
+    ".url": {
+        "hugoblog.Application": {
+            "title": "Hugo Blog",
+            "icon": "images/icon_{0}.png",
+            "type": "url",
+            "protocol": "http",
+            "port": "1313",
+            "url": "/",
+            "allUsers": true
+        }
+    }
+}

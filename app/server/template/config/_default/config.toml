@@ -1,0 +1,12 @@
+baseURL = "/"
+languageCode = "zh-cn"
+title = "我的 Hugo 博客"
+theme = "minimal"
+defaultContentLanguage = "zh-cn"
+hasCJKLanguage = true
+
+[pagination]
+    pagerSize = 20
+
+[params]
+    description = "基于 Hugo 的静态博客，由 fnOS 应用托管渲染"

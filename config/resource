@@ -1,0 +1,28 @@
+{
+    "data-share":
+    {
+        "shares":
+        [
+            {
+                "name": "hugo-blog",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "hugo-blog"
+                    ]
+                }
+            },
+            {
+                "name": "hugo-blog/data",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "hugo-blog"
+                    ]
+                }
+            }
+        ]
+    }
+}

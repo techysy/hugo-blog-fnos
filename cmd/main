@@ -1,0 +1,111 @@
+#!/bin/bash
+set -uo pipefail
+
+APP_NAME="${TRIM_APPNAME:-hugo-blog}"
+APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+PORT="${TRIM_SERVICE_PORT:-1313}"
+LOG="${DATA_DIR}/hugo.log"
+PID_FILE="${DATA_DIR}/hugo.pid"
+
+# 诊断日志（便于排查 fnOS 调用方式）
+DIAG="${DATA_DIR}/hugo-diag.log"
+mkdir -p "${DATA_DIR}" 2>/dev/null
+{
+    echo "=== $(date '+%F %T') call: '${1:-<none>}' USER=$(id -un) UID=$(id -u) ==="
+    echo "  TRIM_APPDEST=${TRIM_APPDEST:-<unset>}"
+    echo "  TRIM_PKGVAR=${TRIM_PKGVAR:-<unset>}"
+    echo "  APP_DIR=${APP_DIR}"
+    echo "  DATA_DIR=${DATA_DIR}"
+} >> "${DIAG}" 2>&1
+
+# 定位安装目录（兼容 /var/apps 与 /vol4/@appcenter 布局）
+if [ -d "${APP_DIR}/server" ]; then
+    SRC_DIR="${APP_DIR}/server"
+elif [ -d "${APP_DIR}/target/server" ]; then
+    SRC_DIR="${APP_DIR}/target/server"
+else
+    echo "ERROR: server dir not found (APP_DIR=${APP_DIR})" >&2
+    exit 1
+fi
+
+# Hugo 二进制
+HUGO_BIN="${SRC_DIR}/hugo"
+if [ ! -x "${HUGO_BIN}" ]; then
+    HUGO_BIN="$(command -v hugo || echo /usr/local/bin/hugo)"
+fi
+
+# 博客源数据目录（content/config/themes 等）
+BLOG_DIR="${DATA_DIR}/blog"
+TEMPLATE_DIR="${SRC_DIR}/template"
+
+ensure_blog_dir() {
+    if [ ! -f "${BLOG_DIR}/config.toml" ] && [ ! -d "${BLOG_DIR}/config" ]; then
+        echo "  init blog dir from template" >> "${DIAG}" 2>&1
+        mkdir -p "${BLOG_DIR}"
+        cp -r "${TEMPLATE_DIR}/." "${BLOG_DIR}/"
+        # hugo 需要写 public/，确保权限
+        chmod -R u+rwX "${BLOG_DIR}" 2>/dev/null || true
+    fi
+    echo "  BLOG_DIR=${BLOG_DIR}" >> "${DIAG}" 2>&1
+}
+
+start() {
+    echo "  start() begin, port=${PORT}" >> "${DIAG}" 2>&1
+    mkdir -p "${DATA_DIR}" 2>/dev/null
+    if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+        echo "already running (pid $(cat "${PID_FILE}"))"; return 0
+    fi
+    ensure_blog_dir
+    # 清理残留进程
+    pkill -f "hugo server.*${BLOG_DIR}" 2>/dev/null || true
+    sleep 1
+    if ss -tln 2>/dev/null | grep -q ":${PORT} "; then
+        echo "port ${PORT} busy" >> "${DIAG}" 2>&1
+        echo "ERROR: port ${PORT} already in use" >&2
+        return 1
+    fi
+    cd "${BLOG_DIR}"
+    setsid "${HUGO_BIN}" server \
+        --source "${BLOG_DIR}" \
+        --bind 0.0.0.0 -p "${PORT}" \
+        --buildDrafts --disableFastRender --ignoreCache \
+        >> "${LOG}" 2>&1 &
+    echo $! > "${PID_FILE}"
+    sleep 2
+    if kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+        echo "started (pid $(cat "${PID_FILE}"))"
+        return 0
+    else
+        echo "ERROR: hugo failed to start, see ${LOG}" >&2
+        return 1
+    fi
+}
+
+stop() {
+    echo "  stop()" >> "${DIAG}" 2>&1
+    if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+        kill "$(cat "${PID_FILE}")" 2>/dev/null || true
+        sleep 1
+    fi
+    pkill -f "hugo server.*${BLOG_DIR}" 2>/dev/null || true
+    rm -f "${PID_FILE}"
+    echo "stopped"
+}
+
+status() {
+    if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+        echo "running (pid $(cat "${PID_FILE}"))"
+        return 0
+    fi
+    echo "stopped"
+    return 1
+}
+
+case "${1:-start}" in
+    start) start ;;
+    stop) stop ;;
+    status) status ;;
+    restart) stop; sleep 1; start ;;
+    *) echo "Usage: $0 {start|stop|status|restart}"; exit 1 ;;
+esac
