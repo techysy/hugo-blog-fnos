@@ -2,6 +2,16 @@
 
 ---
 
+## v0.1.2 (2026-08-09)
+
+### 新增 / Added
+
+- 🎨 **主题管理** — 管理面板新增主题功能：
+  - 列出已安装主题 + 一键切换（改 `config/_default/config.toml` 的 theme 字段，Hugo 自动重新渲染）
+  - 上传主题 zip 包（解压到 `themes/`，含 theme.toml 或 layouts 校验）
+
+---
+
 ## v0.1.1 (2026-08-09)
 
 ### 变更 / Changed

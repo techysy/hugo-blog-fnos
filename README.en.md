@@ -16,7 +16,8 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 ## ✨ Features
 
 - 📝 **Auto-render on write** — create posts via the admin panel and Hugo regenerates the site
-- 🎛️ **Web admin panel** — write/list posts in the browser, no SSH needed
+- 🎛️ **Web admin panel** — write/list posts and switch themes in the browser, no SSH needed
+- 🎨 **Theme manager** — upload and switch themes from the admin panel
 - 🚀 **Zero-dependency** — single Hugo binary, no Node/Python runtime needed
 - 🗄️ **Persistent data** — blog source at `/vol4/@appshare/hugo-blog/`, writable and backup-able
 - 🔄 **App Center managed** — start/stop, auto-start on boot, status
@@ -60,9 +61,13 @@ Body here.
 | Blog source | `/vol4/@appshare/hugo-blog/blog/` |
 | content | `/vol4/@appshare/hugo-blog/blog/content/` |
 
-### Change theme
+### Change theme (admin panel)
 
-Put a theme in `/vol4/@appshare/hugo-blog/blog/themes/<name>/` and set `theme = "<name>"` in `config/_default/config.toml`.
+Open the admin panel (`http://<NAS-IP>:13134`), in the "Theme manager":
+1. **Upload theme**: upload a theme zip (containing `theme.toml` or a `layouts` dir)
+2. **One-click switch**: click "Use" to switch; Hugo re-renders automatically
+
+You can also drop a theme into `/vol4/@appshare/hugo-blog/blog/themes/<name>/` and set `theme = "<name>"` in `config/_default/config.toml`.
 
 ## 🐛 Troubleshooting
 

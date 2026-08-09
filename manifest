@@ -1,5 +1,5 @@
 appname               = hugo-blog
-version               = 0.1.1
+version               = 0.1.2
 display_name          = Hugo Blog
 desc                  = Hugo 静态博客 — 常驻渲染服务，写文章自动生成站点
 arch                  = x86_64

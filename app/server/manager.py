@@ -13,6 +13,8 @@ import re
 import sys
 import json
 import time
+import zipfile
+import shutil
 import http.server
 import socketserver
 import urllib.parse
@@ -23,6 +25,9 @@ BLOG_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/vol4/@appdata/hugo
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 13134
 CONTENT_DIR = BLOG_DIR / "content"
 POST_DIR = CONTENT_DIR / "post"
+THEMES_DIR = BLOG_DIR / "themes"
+CONFIG_DIR = BLOG_DIR / "config" / "_default"
+CONFIG_FILE = CONFIG_DIR / "config.toml"
 
 # 生成安全的 slug (文件名)
 def slugify(title):
@@ -90,6 +95,99 @@ def create_post(title, content, tags=""):
     return str(path.relative_to(BLOG_DIR)), None
 
 
+# ---------- 主题管理 ----------
+
+def current_theme():
+    """从 config.toml 读当前主题"""
+    try:
+        txt = CONFIG_FILE.read_text(encoding="utf-8")
+        m = re.search(r'^\s*theme\s*=\s*["\']([^"\']+)["\']', txt, re.M)
+        if m:
+            return m.group(1).strip()
+    except OSError:
+        pass
+    return ""
+
+
+def list_themes():
+    """列出 themes/ 下的主题目录"""
+    themes = []
+    if THEMES_DIR.exists():
+        for d in sorted(THEMES_DIR.iterdir()):
+            if d.is_dir() and not d.name.startswith("."):
+                # 主题需含 theme.toml 或 layouts
+                is_theme = (d / "theme.toml").exists() or (d / "layouts").exists()
+                themes.append({
+                    "name": d.name,
+                    "valid": is_theme,
+                })
+    return themes
+
+
+def switch_theme(name):
+    """切换主题 (改 config.toml 的 theme 字段)"""
+    if not name or name.startswith(".") or "/" in name:
+        return False, "主题名无效"
+    target = THEMES_DIR / name
+    if not target.is_dir() or (not (target / "theme.toml").exists() and not (target / "layouts").exists()):
+        return False, "主题不存在或无效"
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        txt = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
+        if re.search(r'^\s*theme\s*=', txt, re.M):
+            txt = re.sub(r'^\s*theme\s*=\s*.*$', f'theme = "{name}"', txt, count=1, flags=re.M)
+        else:
+            # 追加到 config.toml
+            txt = txt.rstrip() + f'\ntheme = "{name}"\n'
+        CONFIG_FILE.write_text(txt, encoding="utf-8")
+        return True, None
+    except OSError as e:
+        return False, str(e)
+
+
+def upload_theme(zip_data, filename):
+    """上传主题 zip 包并解压到 themes/"""
+    if not zip_data:
+        return False, "空文件"
+    try:
+        import io
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+            # 安全检查: 拒绝路径穿越
+            names = zf.namelist()
+            for n in names:
+                if n.startswith(("/", "..")) or ".." in n.split("/"):
+                    return False, "非法路径"
+            # 目标目录
+            dest = THEMES_DIR
+            dest.mkdir(parents=True, exist_ok=True)
+            # 判断 zip 根是否含主题名目录
+            root_parts = names[0].split("/") if names else [""]
+            # 解压，若根是单个目录则取其名
+            tmp = dest / ".tmp_upload"
+            if tmp.exists():
+                shutil.rmtree(tmp)
+            tmp.mkdir(parents=True, exist_ok=True)
+            zf.extractall(tmp)
+            # 找到解压后的主题目录
+            entries = [p for p in tmp.iterdir()]
+            if len(entries) == 1 and entries[0].is_dir():
+                theme_dir = entries[0]
+                # 移入 themes/ 下
+                target = dest / theme_dir.name
+                if target.exists():
+                    shutil.rmtree(target)
+                shutil.move(str(theme_dir), str(target))
+                shutil.rmtree(tmp)
+                return True, theme_dir.name
+            else:
+                shutil.rmtree(tmp)
+                return False, "zip 根目录应包含一个主题目录"
+    except zipfile.BadZipFile:
+        return False, "无效的 zip 文件"
+    except Exception as e:
+        return False, str(e)
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         if isinstance(body, str):
@@ -115,6 +213,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, INDEX_HTML, "text/html; charset=utf-8")
         elif path == "/api/posts":
             self._send(200, json.dumps({"posts": list_posts()}))
+        elif path == "/api/themes":
+            self._send(200, json.dumps({
+                "themes": list_themes(),
+                "current": current_theme(),
+            }))
         elif path == "/api/info":
             self._send(200, json.dumps({
                 "blog_dir": str(BLOG_DIR),
@@ -137,6 +240,51 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(400, json.dumps({"error": err}))
                 else:
                     self._send(200, json.dumps({"ok": True, "path": rel_path}))
+            except Exception as e:
+                self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/api/theme/switch":
+            try:
+                data = self._read_json()
+                ok, err = switch_theme(data.get("theme", ""))
+                if ok:
+                    self._send(200, json.dumps({"ok": True}))
+                else:
+                    self._send(400, json.dumps({"error": err}))
+            except Exception as e:
+                self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/api/theme/upload":
+            # 处理 multipart/form-data 文件上传 (手写解析, 零依赖)
+            try:
+                ctype = self.headers.get("Content-Type", "")
+                if "multipart/form-data" not in ctype:
+                    self._send(400, json.dumps({"error": "需要 multipart/form-data"}))
+                    return
+                boundary = ctype.split("boundary=")[-1].strip().strip('"')
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                # 拆分 multipart 各 part
+                parts = body.split(("--" + boundary).encode())
+                file_data = None
+                for part in parts:
+                    part = part.strip()
+                    if not part or part == b"--":
+                        continue
+                    # part: headers\r\n\r\ncontent
+                    if b"\r\n\r\n" in part:
+                        header, content = part.split(b"\r\n\r\n", 1)
+                        # 移除结尾的 \r\n
+                        if content.endswith(b"\r\n"):
+                            content = content[:-2]
+                        if b'name="file"' in header:
+                            file_data = content
+                if not file_data:
+                    self._send(400, json.dumps({"error": "未找到文件字段"}))
+                    return
+                ok, result = upload_theme(file_data, "theme.zip")
+                if ok:
+                    self._send(200, json.dumps({"ok": True, "theme": result}))
+                else:
+                    self._send(400, json.dumps({"error": result}))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
         else:
@@ -206,6 +354,18 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <tbody></tbody>
       </table>
     </div>
+    <div class="panel">
+      <h2>🎨 主题管理 <span id="curTheme" style="font-size:12px;color:var(--muted);font-weight:400"></span></h2>
+      <table id="themesTable">
+        <thead><tr><th>主题</th><th>状态</th><th>操作</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="msg" id="themeMsg"></div>
+      <label>上传主题 (zip 包)</label>
+      <input type="file" id="themeFile" accept=".zip">
+      <button class="btn" onclick="uploadTheme()" style="margin-top:10px">上传主题</button>
+      <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
+    </div>
   </div>
 </div>
 <script>
@@ -240,7 +400,54 @@ async function createPost(){
   }
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function loadThemes(){
+  const r = await fetch('/api/themes');
+  const d = await r.json();
+  document.getElementById('curTheme').textContent = d.current ? '· 当前: ' + d.current : '';
+  const tbody = document.querySelector('#themesTable tbody');
+  tbody.innerHTML = (d.themes||[]).map(t=>{
+    const active = t.name === d.current;
+    return `<tr>
+      <td>${escapeHtml(t.name)}</td>
+      <td>${active ? '<span style="color:var(--accent)">✓ 使用中</span>' : (t.valid ? '可用' : '<span style="color:var(--brand)">无效</span>')}</td>
+      <td>${t.valid && !active ? '<button class="btn secondary" onclick="switchTheme(\''+escapeHtml(t.name)+'\')">使用</button>' : ''}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="3">暂无主题，请上传</td></tr>';
+}
+async function switchTheme(name){
+  const msg = document.getElementById('themeMsg');
+  msg.textContent = '切换中…';
+  const r = await fetch('/api/theme/switch', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({theme: name})
+  });
+  const d = await r.json();
+  if(d.ok){
+    msg.textContent = '✓ 已切换到主题: ' + name + ' (Hugo 自动重新渲染)';
+    loadThemes();
+  } else {
+    msg.textContent = '✗ ' + (d.error||'切换失败');
+  }
+}
+async function uploadTheme(){
+  const msg = document.getElementById('themeMsg');
+  const file = document.getElementById('themeFile').files[0];
+  if(!file){ msg.textContent = '请选择 zip 文件'; return; }
+  msg.textContent = '上传中…';
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await fetch('/api/theme/upload', {method:'POST', body: fd});
+  const d = await r.json();
+  if(d.ok){
+    msg.textContent = '✓ 主题已上传: ' + d.theme + '，可在上方列表切换到该主题';
+    document.getElementById('themeFile').value='';
+    loadThemes();
+  } else {
+    msg.textContent = '✗ ' + (d.error||'上传失败');
+  }
+}
 loadPosts();
+loadThemes();
 </script>
 </body>
 </html>
