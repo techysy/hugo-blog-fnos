@@ -62,6 +62,17 @@ export GONOSUMDB="*"
 export GONOSUMCHECK=1
 export GOFLAGS="-mod=mod"
 
+# 应用代理配置 (控制面板可设置, 存 DATA_DIR/proxy_config)
+if [ -f "${DATA_DIR}/proxy_config" ]; then
+    _http=$(grep "^http=" "${DATA_DIR}/proxy_config" | head -1 | cut -d= -f2-)
+    _https=$(grep "^https=" "${DATA_DIR}/proxy_config" | head -1 | cut -d= -f2-)
+    _noproxy=$(grep "^no_proxy=" "${DATA_DIR}/proxy_config" | head -1 | cut -d= -f2-)
+    [ -n "${_http}" ] && export HTTP_PROXY="${_http}" http_proxy="${_http}"
+    [ -n "${_https}" ] && export HTTPS_PROXY="${_https}" https_proxy="${_https}"
+    [ -n "${_noproxy}" ] && export NO_PROXY="${_noproxy}" no_proxy="${_noproxy}"
+    echo "  proxy: http=${_http:-none} https=${_https:-none}" >> "${DIAG}" 2>&1
+fi
+
 # 博客源数据目录（content/config/themes 等）
 BLOG_DIR="${DATA_DIR}/blog"
 TEMPLATE_DIR="${SRC_DIR}/template"

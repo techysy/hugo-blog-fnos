@@ -33,6 +33,36 @@ DATA_DIR = BLOG_DIR.parent  # 数据目录 (@appdata/hugo-blog)
 TOKEN_FILE = DATA_DIR / "api_token"
 HUGO_BIN = os.environ.get("HUGO_BIN", "/vol4/@appcenter/hugo-blog/server/hugo")
 MODULE_CACHE = DATA_DIR / ".hugo_modules"
+PROXY_FILE = DATA_DIR / "proxy_config"
+
+
+def get_proxy():
+    """读取代理配置. 返回 {http, https, no_proxy}"""
+    http = https = ""
+    no_proxy = "localhost,127.0.0.1"
+    try:
+        if PROXY_FILE.exists():
+            for line in PROXY_FILE.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith("http="):
+                    http = line.split("=", 1)[1].strip()
+                elif line.startswith("https="):
+                    https = line.split("=", 1)[1].strip()
+                elif line.startswith("no_proxy="):
+                    no_proxy = line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return {"http": http, "https": https, "no_proxy": no_proxy}
+
+
+def set_proxy(http, https, no_proxy):
+    """保存代理配置到 proxy_config 文件"""
+    try:
+        content = f"http={http}\nhttps={https}\nno_proxy={no_proxy}\n"
+        PROXY_FILE.write_text(content, encoding="utf-8")
+        return True, None
+    except OSError as e:
+        return False, str(e)
 
 
 def get_or_create_token():
@@ -319,6 +349,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "themes": len(list_themes()),
                 "current_theme": current_theme(),
             }))
+        elif path == "/api/proxy":
+            if not self._check_auth():
+                return
+            self._send(200, json.dumps(get_proxy()))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
@@ -396,6 +430,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(400, json.dumps({"error": result}))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/api/proxy":
+            # 设置代理配置
+            try:
+                data = self._read_json()
+                ok, err = set_proxy(
+                    data.get("http", "").strip(),
+                    data.get("https", "").strip(),
+                    data.get("no_proxy", "localhost,127.0.0.1").strip(),
+                )
+                if ok:
+                    self._send(200, json.dumps({"ok": True}))
+                else:
+                    self._send(400, json.dumps({"error": err}))
+            except Exception as e:
+                self._send(500, json.dumps({"error": str(e)}))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
@@ -456,6 +505,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
     <div class="nav-item active" onclick="switchNav('write')">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')">📄 文章列表</div>
     <div class="nav-item" onclick="switchNav('theme')">🎨 主题</div>
+    <div class="nav-item" onclick="switchNav('settings')">⚙️ 设置</div>
   </div>
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
   <div class="main">
@@ -509,6 +559,21 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <button class="btn secondary" onclick="installModuleTheme()" style="margin-top:10px">下载并安装</button>
         <div class="hint">用于 Hugo Module 依赖的主题（需联网下载）。module 安装后会在列表出现并可切换。</div>
         <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-settings">
+      <div class="panel">
+        <h2>⚙️ 代理设置</h2>
+        <p class="hint" style="margin-bottom:10px">用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。</p>
+        <label>HTTP 代理</label>
+        <input id="proxyHttp" placeholder="http://192.168.31.31:7890">
+        <label>HTTPS 代理</label>
+        <input id="proxyHttps" placeholder="http://192.168.31.31:7890">
+        <label>NO_PROXY</label>
+        <input id="proxyNo" value="localhost,127.0.0.1">
+        <div class="msg" id="proxyMsg"></div>
+        <button class="btn" onclick="saveProxy()" style="margin-top:14px">保存代理设置</button>
+        <div class="hint">保存后重启应用生效（下载 module 时使用）。</div>
       </div>
     </div>
   </div>
@@ -572,6 +637,7 @@ function switchNav(tab){
   if(panel) panel.classList.add('active');
   if(tab === 'posts') loadPosts();
   if(tab === 'theme') loadThemes();
+  if(tab === 'settings') loadProxy();
   toggleSidebar(false); // 切导航后关闭移动端侧边栏
 }
 // 汉堡菜单 (移动端)
@@ -667,6 +733,31 @@ async function installModuleTheme(){
     loadThemes();
   } else {
     msg.textContent = '✗ ' + (d.error||'安装失败');
+  }
+}
+async function loadProxy(){
+  const r = await apiFetch('/api/proxy');
+  const d = await r.json();
+  document.getElementById('proxyHttp').value = d.http || '';
+  document.getElementById('proxyHttps').value = d.https || '';
+  document.getElementById('proxyNo').value = d.no_proxy || 'localhost,127.0.0.1';
+}
+async function saveProxy(){
+  const msg = document.getElementById('proxyMsg');
+  msg.textContent = '保存中…';
+  const r = await apiFetch('/api/proxy', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      http: document.getElementById('proxyHttp').value.trim(),
+      https: document.getElementById('proxyHttps').value.trim(),
+      no_proxy: document.getElementById('proxyNo').value.trim()
+    })
+  });
+  const d = await r.json();
+  if(d.ok){
+    msg.textContent = '✓ 代理设置已保存（重启应用生效）';
+  } else {
+    msg.textContent = '✗ ' + (d.error||'保存失败');
   }
 }
 initToken();

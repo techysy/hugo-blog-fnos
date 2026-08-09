@@ -4,6 +4,18 @@
 
 ---
 
+## 0.1.3.8 (2026-08-09)
+
+### 更新点
+- **控制面板加代理设置**（⚙️ 设置 导航项）：
+  - `GET/POST /api/proxy`（带认证）读写代理配置（HTTP/HTTPS/NO_PROXY），存 `DATA_DIR/proxy_config`
+  - cmd/main 启动 hugo 时读取 proxy_config 设置 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`，解决下载 module 主题慢/超时
+
+### 问题点（已解决）
+- （无新增问题；代理设置本地验证通过）
+
+---
+
 ## ⚠️ 已知坑 / Pitfall
 
 - **module 主题不能简单切换** — 把 docuapi 这类 module 主题放进 themes/ 并 `theme="docuapi-master"`，hugo 启动会尝试下载 module 依赖并超时（`context deadline exceeded`），导致 hugo 卡住、13133 不监听、博客拒绝连接。正确：用管理面板「从 Hugo Module 安装」（`hugo mod get`）下载依赖。
