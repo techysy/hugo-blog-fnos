@@ -1131,6 +1131,16 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 .subtab.active{background:rgba(56,189,248,.12);color:var(--accent);font-weight:600;border-color:rgba(56,189,248,.3)}
 .subpanel{display:none}
 .subpanel.active{display:block}
+/* 主题卡片 */
+.themes-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:14px}
+.theme-card{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.theme-card.active{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.theme-card-head{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.theme-card-status{font-size:12px;color:var(--muted)}
+.theme-card-status .status-active{color:var(--accent);font-weight:600}
+.theme-card-status .status-invalid{color:var(--brand)}
+.theme-card-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn-danger{color:var(--brand)!important}
 /* 服务状态卡片 */
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:8px}
 .stat-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px}
@@ -1229,10 +1239,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <div class="panel">
           <h2 data-i18n="theme_title">🎨 主题管理</h2>
           <div class="hint" id="curTheme" style="margin-bottom:8px"></div>
-          <table id="themesTable">
-            <thead><tr><th data-i18n="th_theme">主题</th><th data-i18n="th_status">状态</th><th data-i18n="th_action">操作</th></tr></thead>
-            <tbody></tbody>
-          </table>
+          <div class="themes-grid" id="themesGrid"></div>
           <div class="msg" id="themeMsg"></div>
           <label data-i18n="install_online_label">在线安装 (git 仓库 或 Hugo Module)</label>
           <div style="display:flex;gap:8px;align-items:center">
@@ -1513,19 +1520,25 @@ async function loadThemes(){
   const r = await apiFetch('/api/themes');
   const d = await r.json();
   document.getElementById('curTheme').textContent = d.current ? '· ' + t('th_theme').replace('主题','') + ': ' + d.current : '';
-  const tbody = document.querySelector('#themesTable tbody');
-  tbody.innerHTML = (d.themes||[]).map(th=>{
+  const grid = document.getElementById('themesGrid');
+  grid.innerHTML = (d.themes||[]).map(th=>{
     const active = th.name === d.current;
     let tag = '';
     if(th.module) tag = '<span class="tag tag-module">'+t('tag_module')+'</span>';
     else if(th.preset) tag = '<span class="tag tag-preset">'+t('tag_preset')+'</span>';
     else if(th.valid) tag = '<span class="tag tag-installed">'+t('tag_installed')+'</span>';
-    return `<tr>
-      <td>${escapeHtml(th.name)}${tag}</td>
-      <td>${active ? '<span style="color:var(--accent)">'+t('in_use')+'</span>' : (th.valid ? t('available') : '<span style="color:var(--brand)">'+t('invalid')+'</span>')}</td>
-      <td>${!active && th.valid ? `<button class="btn secondary" onclick="switchTheme('${th.name}')">${t('use')}</button>` : ''}${!active && th.valid && !th.preset ? ` <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${th.name}')">${t('delete')}</button>` : ''}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="3">'+t('no_themes')+'</td></tr>';
+    const status = active ? '<span class="theme-status status-active">'+t('in_use')+'</span>' : (th.valid ? '<span class="theme-status">'+t('available')+'</span>' : '<span class="theme-status status-invalid">'+t('invalid')+'</span>');
+    let actions = '';
+    if(!active && th.valid){
+      actions += `<button class="btn secondary" onclick="switchTheme('${th.name}')">${t('use')}</button>`;
+      if(!th.preset) actions += ` <button class="btn secondary btn-danger" onclick="deleteTheme('${th.name}')">${t('delete')}</button>`;
+    }
+    return `<div class="theme-card${active ? ' active' : ''}">
+      <div class="theme-card-head">${escapeHtml(th.name)}${tag}</div>
+      <div class="theme-card-status">${status}</div>
+      <div class="theme-card-actions">${actions}</div>
+    </div>`;
+  }).join('') || '<div class="hint">'+t('no_themes')+'</div>';
 }
 async function deleteTheme(name){
   if(!confirm(t('del_confirm', {name}))) return;
