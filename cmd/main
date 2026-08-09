@@ -72,8 +72,10 @@ start() {
         return 1
     fi
     cd "${BLOG_DIR}"
-    # 清理残留的 hugo build lock（可能属主不对导致 hugo-blog 无法写）
+    # 清理残留的 hugo build lock + public 渲染产物
+    # （可能属主不对导致 hugo-blog 无法写，如 SSH 手动测试时用其它用户创建）
     rm -f "${BLOG_DIR}/.hugo_build.lock"
+    rm -rf "${BLOG_DIR}/public"
     setsid "${HUGO_BIN}" server \
         --source "${BLOG_DIR}" \
         --bind 0.0.0.0 -p "${PORT}" \

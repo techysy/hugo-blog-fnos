@@ -4,6 +4,16 @@
 
 ---
 
+## 0.1.3.3 (2026-08-09)
+
+### 更新点
+- **cmd/main 启动 hugo 前同时删除 `.hugo_build.lock` + `public/` 渲染产物** — 避免残留文件（属主非 hugo-blog）导致权限拒绝
+
+### 问题点（已解决）
+1. **启动失败（0.1.3.2）** — 根因：`public/` 目录内文件属主是 `yangyu`（SSH 手动渲染测试创建），hugo-blog 用户无法覆盖 → `permission denied`。修复：cmd/main 启动前 `rm -rf public` + `rm -f .hugo_build.lock`。
+
+---
+
 ## 0.1.3.2 (2026-08-09)
 
 ### 更新点
