@@ -3,10 +3,9 @@ set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-hugo-blog}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
-# 强制使用 @appshare（应用共享目录，文件管理可见）。
-# 注意: fnOS 会注入 TRIM_PKGVAR=/vol4/@appdata/<app>，若用 ${TRIM_PKGVAR:-...}
-# 会被覆盖为 @appdata。这里忽略 TRIM_PKGVAR，固定用 @appshare。
-DATA_DIR="/vol4/@appshare/${APP_NAME}"
+# 数据目录用 fnOS 注入的 TRIM_PKGVAR (天然 = /vol4/@appdata/<app>, app 私有)。
+# 文章/博客源放 app 私有目录，通过管理面板 API 管理，不暴露在公开 share。
+DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
 PORT="${TRIM_SERVICE_PORT:-13133}"
 MGMT_PORT=13134
 LOG="${DATA_DIR}/hugo.log"
@@ -14,6 +13,8 @@ PID_FILE="${DATA_DIR}/hugo.pid"
 MGMT_PID_FILE="${DATA_DIR}/manager.pid"
 MGMT_LOG="${DATA_DIR}/manager.log"
 
+# Hugo Modules 环境: 支持 module 依赖主题 (如 docuapi)
+# go 环境在 SRC_DIR 确定后配置 (见下方)
 # 诊断日志（便于排查 fnOS 调用方式）
 DIAG="${DATA_DIR}/hugo-diag.log"
 mkdir -p "${DATA_DIR}" 2>/dev/null
@@ -40,6 +41,19 @@ HUGO_BIN="${SRC_DIR}/hugo"
 if [ ! -x "${HUGO_BIN}" ]; then
     HUGO_BIN="$(command -v hugo || echo /usr/local/bin/hugo)"
 fi
+
+# Hugo Modules 环境: 支持 module 依赖主题 (如 docuapi)
+# 需要 go 二进制 (打包在 server/go, 精简版 ~93MB)
+GO_DIR="${SRC_DIR}/go"
+if [ -x "${GO_DIR}/bin/go" ]; then
+    export GOROOT="${GO_DIR}"
+    export PATH="${GO_DIR}/bin:${PATH}"
+fi
+export HUGO_MODULE_CACHE="${DATA_DIR}/.hugo_modules"
+export GOPROXY="https://goproxy.cn,direct"
+export GONOSUMDB="*"
+export GONOSUMCHECK=1
+export GOFLAGS="-mod=mod"
 
 # 博客源数据目录（content/config/themes 等）
 BLOG_DIR="${DATA_DIR}/blog"
@@ -104,7 +118,7 @@ start_manager() {
     fi
     PY="${SRC_DIR}/manager.py"
     if [ -f "$PY" ]; then
-        setsid /usr/bin/python3 "$PY" "${BLOG_DIR}" "${MGMT_PORT}" \
+        HUGO_BIN="${HUGO_BIN}" BLOG_DIR="${BLOG_DIR}" setsid /usr/bin/python3 "$PY" "${BLOG_DIR}" "${MGMT_PORT}" \
             >> "${MGMT_LOG}" 2>&1 &
         echo $! > "${MGMT_PID_FILE}"
     fi

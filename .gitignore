@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 *.fpk
+# go 工具链 (93MB, 打包时单独传到 NAS, 不进 git)
+app/server/go/

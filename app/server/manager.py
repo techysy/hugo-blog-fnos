@@ -29,8 +29,10 @@ POST_DIR = CONTENT_DIR / "post"
 THEMES_DIR = BLOG_DIR / "themes"
 CONFIG_DIR = BLOG_DIR / "config" / "_default"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
-DATA_DIR = BLOG_DIR.parent  # 数据目录 (@appshare/hugo-blog)
+DATA_DIR = BLOG_DIR.parent  # 数据目录 (@appdata/hugo-blog)
 TOKEN_FILE = DATA_DIR / "api_token"
+HUGO_BIN = os.environ.get("HUGO_BIN", "/vol4/@appcenter/hugo-blog/server/hugo")
+MODULE_CACHE = DATA_DIR / ".hugo_modules"
 
 
 def get_or_create_token():
@@ -134,7 +136,7 @@ def current_theme():
 
 
 def list_themes():
-    """列出 themes/ 下的主题目录"""
+    """列出 themes/ 下的主题目录 + go.mod 的 module 主题"""
     themes = []
     if THEMES_DIR.exists():
         for d in sorted(THEMES_DIR.iterdir()):
@@ -145,16 +147,27 @@ def list_themes():
                     "name": d.name,
                     "valid": is_theme,
                 })
+    # go.mod 里的 module 主题 (theme 配置含 / 的是 module 路径)
+    go_mod = BLOG_DIR / "go.mod"
+    if go_mod.exists():
+        for line in go_mod.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("require") or line.startswith("\t"):
+                parts = line.replace("require", "").strip().split()
+                if parts:
+                    themes.append({"name": parts[0], "valid": True, "module": True})
     return themes
 
 
 def switch_theme(name):
-    """切换主题 (改 config.toml 的 theme 字段)"""
-    if not name or name.startswith(".") or "/" in name:
+    """切换主题 (改 config.toml 的 theme 字段). 支持传统主题名 或 module 路径."""
+    if not name or name.startswith("."):
         return False, "主题名无效"
-    target = THEMES_DIR / name
-    if not target.is_dir() or (not (target / "theme.toml").exists() and not (target / "layouts").exists()):
-        return False, "主题不存在或无效"
+    is_module = "/" in name
+    if not is_module:
+        target = THEMES_DIR / name
+        if not target.is_dir() or (not (target / "theme.toml").exists() and not (target / "layouts").exists()):
+            return False, "主题不存在或无效"
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         txt = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
@@ -210,6 +223,40 @@ def upload_theme(zip_data, filename):
         return False, "无效的 zip 文件"
     except Exception as e:
         return False, str(e)
+
+
+def install_module_theme(module_path):
+    """从 Hugo Module 安装主题 (hugo mod get). module_path 如 github.com/bep/docuapi."""
+    module_path = module_path.strip()
+    if not module_path:
+        return False, "module 路径为空"
+    # 安全检查
+    if " " in module_path or "\n" in module_path:
+        return False, "非法 module 路径"
+    # go.mod
+    go_mod = BLOG_DIR / "go.mod"
+    if not go_mod.exists():
+        go_mod.write_text("module github.com/techysy/hugo-blog\n\ngo 1.16\n", encoding="utf-8")
+    # 配置 module 环境
+    env = dict(os.environ)
+    env["HUGO_MODULE_CACHE"] = str(MODULE_CACHE)
+    env["GOPROXY"] = "https://goproxy.cn,direct"
+    env["GOFLAGS"] = "-mod=mod"
+    # 下载 module
+    import subprocess
+    try:
+        r = subprocess.run(
+            [HUGO_BIN, "mod", "get", module_path],
+            cwd=str(BLOG_DIR), capture_output=True, text=True, env=env, timeout=120,
+        )
+        if r.returncode != 0:
+            return False, r.stderr.strip()[-300:] or "hugo mod get 失败"
+    except subprocess.TimeoutExpired:
+        return False, "下载 module 超时"
+    except Exception as e:
+        return False, str(e)
+    # 设置 theme
+    return switch_theme(module_path)
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -338,6 +385,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(400, json.dumps({"error": result}))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/api/theme/module":
+            # 从 Hugo Module 安装主题 (hugo mod get)
+            try:
+                data = self._read_json()
+                ok, result = install_module_theme(data.get("module", ""))
+                if ok:
+                    self._send(200, json.dumps({"ok": True, "theme": result}))
+                else:
+                    self._send(400, json.dumps({"error": result}))
+            except Exception as e:
+                self._send(500, json.dumps({"error": str(e)}))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
@@ -407,7 +465,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <h1>Hugo Blog 管理</h1>
       </div>
       <div style="display:flex;gap:8px">
-        <a class="btn secondary" href="http://" onclick="location='http://'+location.hostname+':13133/';return false" target="_blank" style="text-decoration:none">查看博客</a>
+        <a class="btn secondary" href="javascript:void(0)" onclick="window.open('http://'+location.hostname+':13133/','_blank');return false" style="text-decoration:none">查看博客</a>
       </div>
     </div>
     <div class="tab-panel active" id="tab-write">
@@ -446,6 +504,10 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <label>上传主题 (zip 包)</label>
         <input type="file" id="themeFile" accept=".zip">
         <button class="btn" onclick="uploadTheme()" style="margin-top:10px">上传主题</button>
+        <label>从 Hugo Module 安装</label>
+        <input id="moduleInput" placeholder="github.com/bep/docuapi">
+        <button class="btn secondary" onclick="installModuleTheme()" style="margin-top:10px">下载并安装</button>
+        <div class="hint">用于 Hugo Module 依赖的主题（需联网下载）。module 安装后会在列表出现并可切换。</div>
         <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
       </div>
     </div>
@@ -587,6 +649,24 @@ async function uploadTheme(){
     loadThemes();
   } else {
     msg.textContent = '✗ ' + (d.error||'上传失败');
+  }
+}
+async function installModuleTheme(){
+  const msg = document.getElementById('themeMsg');
+  const mod = document.getElementById('moduleInput').value.trim();
+  if(!mod){ msg.textContent = '请输入 module 路径'; return; }
+  msg.textContent = '下载中… (可能需要一些时间)';
+  const r = await apiFetch('/api/theme/module', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({module: mod})
+  });
+  const d = await r.json();
+  if(d.ok){
+    msg.textContent = '✓ module 主题已安装并启用: ' + d.theme;
+    document.getElementById('moduleInput').value='';
+    loadThemes();
+  } else {
+    msg.textContent = '✗ ' + (d.error||'安装失败');
   }
 }
 initToken();

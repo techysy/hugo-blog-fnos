@@ -4,6 +4,23 @@
 
 ---
 
+## 0.1.3.7 (2026-08-09)
+
+### 更新点
+- **数据目录改回 @appdata** — 文章/博客源放 app 私有目录（`/vol4/@appdata/<app>`），通过管理面板 API 管理，不暴露在公开 @appshare
+- **支持 Hugo Module 依赖主题** — 打包精简 go（~93MB，去掉 src/test）进 fpk；cmd/main 配置 GOROOT/PATH/GOPROXY；管理面板加"从 Hugo Module 安装"（`hugo mod get`）
+
+### 问题点（已解决）
+1. **module 主题需 go** — hugo mod get 报 "binary go not found"。打包精简 go 解决。
+2. **docuapi 等 module 主题** — 通过 module 安装而非上传 zip 到 themes/。
+
+### 验证状态
+- [x] 打包 go + hugo mod get 下载 docuapi 成功
+- [x] module 主题渲染成功
+- [x] cmd/main go 环境配置
+
+---
+
 ## 0.1.3.6 (2026-08-09)
 
 ### 更新点
