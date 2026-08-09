@@ -358,16 +358,20 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang 
 .sidebar .brand{font-size:15px;font-weight:700;padding:4px 12px 14px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;align-items:center;gap:8px}
 .nav-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--muted);margin-bottom:2px}
 .nav-item.active{background:rgba(56,189,248,.12);color:var(--accent);font-weight:600}
-.main{flex:1;padding:16px;min-width:0}
-.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.main{flex:1;padding:16px;min-width:0;display:flex;flex-direction:column;min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px}
 .topbar h1{font-size:20px}
-/* Tab 分页导航 (参考 strava 切换风格) */
-.tabs{display:flex;gap:8px;margin-bottom:16px}
-.tab-btn{padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
-.tab-btn.active{border-color:var(--brand);color:var(--brand);background:var(--card);font-weight:700}
-.tab-btn:hover{opacity:.85}
+/* 汉堡菜单 (移动端) */
+.hamburger{display:none;background:none;border:none;font-size:20px;color:var(--text);cursor:pointer;padding:4px 6px}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;border:none}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
+@media (max-width:768px){
+  .sidebar{position:fixed;left:-220px;top:0;bottom:0;z-index:1000;transition:left .25s ease;height:100vh;overflow-y:auto}
+  .sidebar.open{left:0}
+  .hamburger{display:inline-block}
+  .sidebar-overlay.show{display:block}
+}
 /* 分页控件 */
 .pager{display:flex;align-items:center;gap:8px;margin-top:12px;justify-content:center}
 .pager button{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card2);color:var(--text);cursor:pointer;font-size:12px}
@@ -389,22 +393,22 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 </head>
 <body data-theme="light">
 <div class="layout">
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="brand">📝 Hugo Blog</div>
-    <div class="nav-item active" onclick="location='/'">✍️ 写文章</div>
-    <div class="nav-item" onclick="location='/'">📄 文章列表</div>
+    <div class="nav-item active" onclick="switchNav('write')">✍️ 写文章</div>
+    <div class="nav-item" onclick="switchNav('posts')">📄 文章列表</div>
+    <div class="nav-item" onclick="switchNav('theme')">🎨 主题</div>
   </div>
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
   <div class="main">
     <div class="topbar">
-      <h1>Hugo Blog 管理</h1>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>Hugo Blog 管理</h1>
+      </div>
       <div style="display:flex;gap:8px">
         <a class="btn secondary" href="http://" onclick="location='http://'+location.hostname+':13133/';return false" target="_blank" style="text-decoration:none">查看博客</a>
       </div>
-    </div>
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('write', this)">✍️ 写文章</button>
-      <button class="tab-btn" onclick="switchTab('posts', this)">📄 文章列表</button>
-      <button class="tab-btn" onclick="switchTab('theme', this)">🎨 主题</button>
     </div>
     <div class="tab-panel active" id="tab-write">
       <div class="panel">
@@ -496,15 +500,25 @@ function changePage(delta){
   currentPage += delta;
   renderPosts();
 }
-// tab 切换
-function switchTab(tab, btn){
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+// 侧边栏导航切换
+function switchNav(tab){
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  const navItem = [...document.querySelectorAll('.nav-item')].find(b => b.getAttribute('onclick').includes("'" + tab + "'"));
+  if(navItem) navItem.classList.add('active');
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('tab-' + tab);
   if(panel) panel.classList.add('active');
   if(tab === 'posts') loadPosts();
   if(tab === 'theme') loadThemes();
+  toggleSidebar(false); // 切导航后关闭移动端侧边栏
+}
+// 汉堡菜单 (移动端)
+function toggleSidebar(force){
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebarOverlay');
+  const open = typeof force === 'boolean' ? force : !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('show', open);
 }
 async function createPost(){
   const msg = document.getElementById('msg');
