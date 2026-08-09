@@ -35,6 +35,9 @@ HUGO_BIN = os.environ.get("HUGO_BIN", "/vol4/@appcenter/hugo-blog/server/hugo")
 MODULE_CACHE = DATA_DIR / ".hugo_modules"
 PROXY_FILE = DATA_DIR / "proxy_config"
 
+# 系统预置主题 (打包自带, template/themes/ 下)
+PRESET_THEMES = {"minimal"}
+
 # ---------- 日志 (控制台) ----------
 # 日志来源: 名称 -> 文件名 (在 DATA_DIR 下)
 LOG_SOURCES = {
@@ -160,6 +163,75 @@ def read_logs(name, date=None, tail=500):
     except OSError as e:
         return {"source": name, "date": date, "display": display, "total": 0,
                 "content": f"读取日志失败: {e}"}
+
+
+def get_service_status():
+    """返回服务状态: hugo/manager 进程、端口、版本、数据统计."""
+    blog_port = 13133  # hugo 博客端口 (固定)
+    status = {
+        "hugo": {"running": False, "pid": None},
+        "manager": {"running": False, "pid": None},
+        "ports": {"blog": blog_port, "admin": PORT},
+    }
+    # 端口实际监听状态
+    status["ports"]["blog"] = _port_open(blog_port)
+    status["ports"]["admin"] = _port_open(PORT)
+    # hugo / manager 进程 (读 pid 文件 + 端口交叉判断)
+    for name, pidfile in (("hugo", DATA_DIR / "hugo.pid"), ("manager", DATA_DIR / "manager.pid")):
+        try:
+            if pidfile.exists():
+                pid = int(pidfile.read_text().strip() or 0)
+                if pid and _pid_alive(pid):
+                    status[name]["running"] = True
+                    status[name]["pid"] = pid
+        except (OSError, ValueError):
+            pass
+    # 兜底: hugo 进程以端口为准
+    if not status["hugo"]["running"] and status["ports"]["blog"]:
+        status["hugo"]["running"] = True
+    if not status["manager"]["running"] and status["ports"]["admin"]:
+        status["manager"]["running"] = True
+    # hugo 版本
+    try:
+        import subprocess
+        r = subprocess.run([HUGO_BIN, "version"], capture_output=True, text=True, timeout=5)
+        status["hugo_version"] = r.stdout.strip().split("\n")[0] if r.stdout else HUGO_BIN
+    except Exception:
+        status["hugo_version"] = HUGO_BIN
+    # 数据统计
+    try:
+        status["posts"] = len(list_posts())
+        status["themes"] = len(list_themes())
+        status["current_theme"] = current_theme()
+    except Exception:
+        pass
+    return status
+
+
+def _port_open(port):
+    """检查端口是否有进程监听 (读 /proc/net/tcp)."""
+    try:
+        h = f":{port:04X}"
+        for fn in ("/proc/net/tcp", "/proc/net/tcp6"):
+            if not os.path.exists(fn):
+                continue
+            for line in open(fn, errors="ignore"):
+                if h in line and "0A" in line.split()[3]:
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _pid_alive(pid):
+    """检查进程是否存活."""
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
 
 
 def get_proxy():
@@ -302,6 +374,7 @@ def list_themes():
                 themes.append({
                     "name": d.name,
                     "valid": is_theme,
+                    "preset": d.name in PRESET_THEMES,
                 })
     # go.mod 里的 module 依赖 (含 "/" 的才是 module 主题路径; 跳过 indirect 工具依赖)
     go_mod = BLOG_DIR / "go.mod"
@@ -448,6 +521,9 @@ def install_git_theme(git_url):
     if not name:
         return False, "无法从 URL 推断主题名"
     target = THEMES_DIR / name
+    # 已存在检查: 避免 git clone 报 "destination path already exists"
+    if target.exists():
+        return False, f"主题「{name}」已存在，无需重复安装。可直接在列表切换到该主题，或先删除再重新安装。"
     try:
         THEMES_DIR.mkdir(parents=True, exist_ok=True)
         # 用 git clone (走代理配置)
@@ -574,12 +650,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         elif path == "/api/info":
             if not self._check_auth():
                 return
-            self._send(200, json.dumps({
-                "blog_dir": str(BLOG_DIR),
-                "posts": len(list_posts()),
-                "themes": len(list_themes()),
-                "current_theme": current_theme(),
-            }))
+            self._send(200, json.dumps(get_service_status()))
         elif path == "/api/proxy":
             if not self._check_auth():
                 return
@@ -797,12 +868,28 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
 th{color:var(--muted);font-weight:500;font-size:12px}
 .hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.6}
+/* 子标签页 (设置内: 仪表板/代理) */
+.subtabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.subtab{padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--muted);cursor:pointer;font-size:13px}
+.subtab.active{background:var(--brand);color:#fff;font-weight:600;border-color:var(--brand)}
+.subpanel{display:none}
+.subpanel.active{display:block}
+/* 服务状态卡片 */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:8px}
+.stat-card{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px}
+.stat-card .k{font-size:11px;color:var(--muted);margin-bottom:4px}
+.stat-card .v{font-size:16px;font-weight:600}
+.stat-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.dot-on{background:#22c55e}.dot-off{background:#ef4444}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:6px;margin-left:6px}
+.tag-preset{background:rgba(56,189,248,.15);color:var(--accent)}
+.tag-installed{background:rgba(34,197,94,.15);color:#22c55e}
+.tag-module{background:rgba(240,148,0,.15);color:var(--brand)}
 </style>
 </head>
 <body data-theme="light">
 <div class="layout">
   <div class="sidebar" id="sidebar">
-    <div class="brand">📝 Hugo Blog</div>
     <div class="nav-item active" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
     <div class="nav-item" onclick="switchNav('theme')" data-i18n="nav_theme">🎨 主题</div>
@@ -813,7 +900,6 @@ th{color:var(--muted);font-weight:500;font-size:12px}
     <div class="topbar">
       <div style="display:flex;align-items:center;gap:8px">
         <button class="hamburger" onclick="toggleSidebar()">☰</button>
-        <h1 data-i18n="app_title">Hugo Blog 管理</h1>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn secondary" id="langToggle" onclick="toggleLang()" style="width:auto;padding:6px 10px" title="中/EN">EN</button>
@@ -848,7 +934,8 @@ th{color:var(--muted);font-weight:500;font-size:12px}
     </div>
     <div class="tab-panel" id="tab-theme">
       <div class="panel">
-        <h2 data-i18n="theme_title">🎨 主题管理 <span id="curTheme" style="font-size:12px;color:var(--muted);font-weight:400"></span></h2>
+        <h2 data-i18n="theme_title">🎨 主题管理</h2>
+        <div class="hint" id="curTheme" style="margin-bottom:8px"></div>
         <table id="themesTable">
           <thead><tr><th data-i18n="th_theme">主题</th><th data-i18n="th_status">状态</th><th data-i18n="th_action">操作</th></tr></thead>
           <tbody></tbody>
@@ -867,35 +954,45 @@ th{color:var(--muted);font-weight:500;font-size:12px}
       </div>
     </div>
     <div class="tab-panel" id="tab-settings">
-      <div class="panel">
-        <h2 data-i18n="proxy_title">⚙️ 代理设置</h2>
-        <p class="hint" style="margin-bottom:10px" data-i18n="proxy_hint">用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。</p>
-        <label data-i18n="http_label">HTTP 代理</label>
-        <input id="proxyHttp" placeholder="http://192.168.31.31:7890">
-        <label data-i18n="https_label">HTTPS 代理</label>
-        <input id="proxyHttps" placeholder="http://192.168.31.31:7890">
-        <label data-i18n="noproxy_label">NO_PROXY</label>
-        <input id="proxyNo" value="localhost,127.0.0.1">
-        <div class="msg" id="proxyMsg"></div>
-        <button class="btn" onclick="saveProxy()" style="margin-top:14px" data-i18n="save_proxy">保存代理设置</button>
-        <div class="hint" data-i18n="proxy_restart_hint">保存后重启应用生效（下载 module 时使用）。</div>
+      <div class="subtabs">
+        <button class="subtab active" onclick="switchSubTab('dash')" data-i18n="sub_dash">📊 仪表板</button>
+        <button class="subtab" onclick="switchSubTab('proxy')" data-i18n="sub_proxy">⚙️ 代理</button>
       </div>
-      <div class="panel">
-        <h2 data-i18n="console_title">📜 日志控制台</h2>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-          <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
-            <option value="hugo">Hugo 日志</option>
-            <option value="manager">管理面板日志</option>
-          </select>
-          <select id="logDate" onchange="loadLogs()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
-            <option value="">当前</option>
-          </select>
-          <button class="btn secondary" onclick="loadLogs()" data-i18n="refresh">🔄 刷新</button>
-          <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
+      <div class="subpanel active" id="sub-dash">
+        <div class="panel">
+          <h2 data-i18n="dash_title">📊 服务状态</h2>
+          <div class="stat-grid" id="statGrid"></div>
         </div>
-        <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
-        <pre id="logView" style="background:#0b0e11;color:#d4d4d4;border:1px solid #222;border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
-        <div class="hint" style="margin-top:8px" data-i18n="console_hint">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
+        <div class="panel">
+          <h2 data-i18n="console_title">📜 日志控制台</h2>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+            <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
+              <option value="hugo">Hugo 日志</option>
+              <option value="manager">管理面板日志</option>
+            </select>
+            <select id="logDate" onchange="loadLogs()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
+              <option value="">当前</option>
+            </select>
+            <button class="btn secondary" onclick="loadLogs()" data-i18n="refresh">🔄 刷新</button>
+            <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
+          </div>
+          <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
+          <pre id="logView" style="background:#0b0e11;color:#d4d4d4;border:1px solid #222;border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
+          <div class="hint" style="margin-top:8px" data-i18n="console_hint">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
+        </div>
+      </div>
+      <div class="subpanel" id="sub-proxy">
+        <div class="panel">
+          <h2 data-i18n="proxy_title">⚙️ 代理设置</h2>
+          <p class="hint" style="margin-bottom:10px" data-i18n="proxy_hint">用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。</p>
+          <label data-i18n="proxy_addr_label">代理地址 (HTTP/HTTPS 共用)</label>
+          <input id="proxyAddr" placeholder="http://192.168.31.31:7890">
+          <label data-i18n="noproxy_label">NO_PROXY <span style="color:var(--muted);font-weight:400" data-i18n="noproxy_optional">(可选)</span></label>
+          <input id="proxyNo" value="localhost,127.0.0.1">
+          <div class="msg" id="proxyMsg"></div>
+          <button class="btn" onclick="saveProxy()" style="margin-top:14px" data-i18n="save_proxy">保存代理设置</button>
+          <div class="hint" data-i18n="proxy_restart_hint">保存后重启应用生效（下载 module 时使用）。</div>
+        </div>
       </div>
     </div>
   </div>
@@ -909,11 +1006,13 @@ const I18N = {
     view_blog:'查看博客',
     new_post_title:'✍️ 新建文章', title_label:'标题 *', tags_label:'标签 (逗号分隔)', content_label:'内容 (Markdown)', save_publish:'保存并发布', save_hint:'保存后 Hugo 会自动重新渲染，稍等片刻刷新博客即可看到。',
     posts_title:'📄 文章列表', th_title:'标题', th_date:'日期', th_file:'文件名', prev_page:'‹ 上一页', next_page:'下一页 ›', no_posts:'暂无文章',
-    theme_title:'🎨 主题管理', th_theme:'主题', th_status:'状态', th_action:'操作', in_use:'✓ 使用中', available:'可用', invalid:'无效', use:'使用', delete:'删除', no_themes:'暂无主题，请上传',
+    theme_title:'🎨 主题管理', th_theme:'主题', th_status:'状态', th_action:'操作', in_use:'✓ 使用中', available:'可用', invalid:'无效', use:'使用', delete:'删除', no_themes:'暂无主题，请上传', tag_preset:'系统预置', tag_installed:'已安装', tag_module:'Module',
     install_online_label:'在线安装 (git 仓库 或 Hugo Module)', install_btn:'安装', install_hint:'git 地址自动克隆，module 路径自动下载；联网后自动检测依赖（module/sass）。',
     upload_label:'上传主题 zip 包', upload_note:'(用于无法使用 GitHub 的场景)', upload_btn:'上传主题', upload_hint:'上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。',
-    proxy_title:'⚙️ 代理设置', proxy_hint:'用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。', http_label:'HTTP 代理', https_label:'HTTPS 代理', noproxy_label:'NO_PROXY', save_proxy:'保存代理设置', proxy_restart_hint:'保存后重启应用生效（下载 module 时使用）。',
+    proxy_title:'⚙️ 代理设置', proxy_hint:'用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。', proxy_addr_label:'代理地址 (HTTP/HTTPS 共用)', noproxy_label:'NO_PROXY', noproxy_optional:'(可选)', save_proxy:'保存代理设置', proxy_restart_hint:'保存后重启应用生效（下载 module 时使用）。',
     console_title:'📜 日志控制台', refresh:'🔄 刷新', download:'⬇️ 下载', current:'当前', console_hint:'日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。',
+    sub_dash:'📊 仪表板', sub_proxy:'⚙️ 代理', dash_title:'📊 服务状态',
+    stat_hugo:'Hugo 服务', stat_manager:'管理面板', stat_blog_port:'博客端口', stat_admin_port:'管理端口', stat_version:'Hugo 版本', stat_posts:'文章', stat_themes:'主题', stat_cur_theme:'当前主题', stat_running:'运行中', stat_stopped:'已停止',
     saving:'保存中…', saved:'✓ 已保存:', rendering:'(Hugo 自动渲染中)', save_fail:'保存失败', deleting:'删除中…', deleted:'✓ 已删除主题:', delete_fail:'删除失败', del_confirm:'确定删除主题「{name}」吗？',
     switching:'切换中…', switched:'✓ 已切换到主题:', switch_fail:'切换失败', uploading:'上传中…', uploaded:'✓ 主题已上传:', upload_fail:'上传失败', pls_zip:'请选择 zip 文件', no_theme:'请输入 git 地址或 module 路径', installing:'安装中… (可能需要一些时间)', installed:'✓ 主题已安装:', deps:'依赖', install_fail:'安装失败', invalid_install:'无法识别：请输入 git 仓库地址 或 Hugo module 路径',
     proxy_saved:'✓ 代理设置已保存（重启应用生效）', proxy_save_fail:'保存失败', loading_log:'加载中…', load_log_fail:'加载日志失败:', log_read_fail:'读取失败', no_log:'无日志内容', no_log_data:'(暂无日志)', load_list_fail:'加载日志列表失败:', log_fmt:'{src} 日志 · {disp} · 共 {total} 行',
@@ -923,11 +1022,13 @@ const I18N = {
     view_blog:'View Blog',
     new_post_title:'✍️ New Post', title_label:'Title *', tags_label:'Tags (comma separated)', content_label:'Content (Markdown)', save_publish:'Save & Publish', save_hint:'Hugo re-renders automatically; refresh the blog shortly to see changes.',
     posts_title:'📄 Posts', th_title:'Title', th_date:'Date', th_file:'File', prev_page:'‹ Prev', next_page:'Next ›', no_posts:'No posts',
-    theme_title:'🎨 Themes', th_theme:'Theme', th_status:'Status', th_action:'Actions', in_use:'✓ In use', available:'Available', invalid:'Invalid', use:'Use', delete:'Delete', no_themes:'No themes, upload one',
+    theme_title:'🎨 Themes', th_theme:'Theme', th_status:'Status', th_action:'Actions', in_use:'✓ In use', available:'Available', invalid:'Invalid', use:'Use', delete:'Delete', no_themes:'No themes, upload one', tag_preset:'Preset', tag_installed:'Installed', tag_module:'Module',
     install_online_label:'Install Online (git repo or Hugo Module)', install_btn:'Install', install_hint:'git URL clones, module path downloads; auto-detects deps (module/sass) when online.',
     upload_label:'Upload theme zip', upload_note:'(for when GitHub is unavailable)', upload_btn:'Upload', upload_hint:'Zip must contain one theme dir (theme.toml or layouts).',
-    proxy_title:'⚙️ Proxy Settings', proxy_hint:'Proxy used when Hugo downloads module theme deps (docuapi etc). Leave empty for direct.', http_label:'HTTP proxy', https_label:'HTTPS proxy', noproxy_label:'NO_PROXY', save_proxy:'Save Proxy', proxy_restart_hint:'Takes effect after app restart (used when downloading modules).',
+    proxy_title:'⚙️ Proxy Settings', proxy_hint:'Proxy used when Hugo downloads module theme deps (docuapi etc). Leave empty for direct.', proxy_addr_label:'Proxy address (shared HTTP/HTTPS)', noproxy_label:'NO_PROXY', noproxy_optional:'(optional)', save_proxy:'Save Proxy', proxy_restart_hint:'Takes effect after app restart (used when downloading modules).',
     console_title:'📜 Log Console', refresh:'🔄 Refresh', download:'⬇️ Download', current:'Current', console_hint:'Logs are archived by date. Current file keeps today only; history moves to data/logs/.',
+    sub_dash:'📊 Dashboard', sub_proxy:'⚙️ Proxy', dash_title:'📊 Service Status',
+    stat_hugo:'Hugo Service', stat_manager:'Admin Panel', stat_blog_port:'Blog Port', stat_admin_port:'Admin Port', stat_version:'Hugo Version', stat_posts:'Posts', stat_themes:'Themes', stat_cur_theme:'Current Theme', stat_running:'Running', stat_stopped:'Stopped',
     saving:'Saving…', saved:'✓ Saved:', rendering:'(Hugo re-rendering)', save_fail:'Save failed', deleting:'Deleting…', deleted:'✓ Deleted theme:', delete_fail:'Delete failed', del_confirm:'Delete theme "{name}"?',
     switching:'Switching…', switched:'✓ Switched to:', switch_fail:'Switch failed', uploading:'Uploading…', uploaded:'✓ Uploaded:', upload_fail:'Upload failed', pls_zip:'Select a zip file', no_theme:'Enter git URL or module path', installing:'Installing… (may take a while)', installed:'✓ Installed:', deps:'deps', install_fail:'Install failed', invalid_install:'Unrecognized: enter a git repo URL or a Hugo module path',
     proxy_saved:'✓ Proxy saved (takes effect after restart)', proxy_save_fail:'Save failed', loading_log:'Loading…', load_log_fail:'Failed to load log:', log_read_fail:'Read failed', no_log:'No log content', no_log_data:'(no log)', load_list_fail:'Failed to load log list:', log_fmt:'{src} log · {disp} · {total} lines',
@@ -1025,8 +1126,42 @@ function switchNav(tab){
   if(panel) panel.classList.add('active');
   if(tab === 'posts') loadPosts();
   if(tab === 'theme') loadThemes();
-  if(tab === 'settings'){ loadProxy(); loadLogDates(); }
+  if(tab === 'settings'){ switchSubTab('dash'); loadStatus(); loadLogDates(); }
   toggleSidebar(false); // 切导航后关闭移动端侧边栏
+}
+// 设置页内子 tab 切换 (仪表板/代理)
+function switchSubTab(name){
+  document.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
+  const btn = [...document.querySelectorAll('.subtab')].find(b => b.getAttribute('onclick').includes("'"+name+"'"));
+  if(btn) btn.classList.add('active');
+  document.querySelectorAll('.subpanel').forEach(p => p.classList.remove('active'));
+  const sp = document.getElementById('sub-' + name);
+  if(sp) sp.classList.add('active');
+  if(name === 'dash'){ loadStatus(); loadLogDates(); }
+  if(name === 'proxy') loadProxy();
+}
+// 加载服务状态卡片
+async function loadStatus(){
+  const grid = document.getElementById('statGrid');
+  grid.innerHTML = '…';
+  try{
+    const r = await apiFetch('/api/info');
+    const d = await r.json();
+    const dot = on => '<span class="stat-dot ' + (on?'dot-on':'dot-off') + '"></span>';
+    const cards = [
+      {k:t('stat_hugo'), v:(d.hugo && d.hugo.running) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_manager'), v:(d.manager && d.manager.running) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_blog_port')+' :13133', v:(d.ports && d.ports.blog) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_admin_port')+' :13134', v:(d.ports && d.ports.admin) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_posts'), v:(d.posts||0)},
+      {k:t('stat_themes'), v:(d.themes||0)},
+      {k:t('stat_version'), v:(d.hugo_version||'').split(' ')[0]||'-'},
+      {k:t('stat_cur_theme'), v:(d.current_theme||'-')},
+    ];
+    grid.innerHTML = cards.map(c=>'<div class="stat-card"><div class="k">'+c.k+'</div><div class="v">'+c.v+'</div></div>').join('');
+  }catch(e){
+    grid.innerHTML = '<div class="hint">'+t('load_log_fail')+' '+e+'</div>';
+  }
 }
 // 汉堡菜单 (移动端)
 function toggleSidebar(force){
@@ -1064,12 +1199,16 @@ async function loadThemes(){
   const d = await r.json();
   document.getElementById('curTheme').textContent = d.current ? '· ' + t('th_theme').replace('主题','') + ': ' + d.current : '';
   const tbody = document.querySelector('#themesTable tbody');
-  tbody.innerHTML = (d.themes||[]).map(t=>{
-    const active = t.name === d.current;
+  tbody.innerHTML = (d.themes||[]).map(th=>{
+    const active = th.name === d.current;
+    let tag = '';
+    if(th.module) tag = '<span class="tag tag-module">'+t('tag_module')+'</span>';
+    else if(th.preset) tag = '<span class="tag tag-preset">'+t('tag_preset')+'</span>';
+    else if(th.valid) tag = '<span class="tag tag-installed">'+t('tag_installed')+'</span>';
     return `<tr>
-      <td>${escapeHtml(t.name)}</td>
-      <td>${active ? '<span style="color:var(--accent)">'+t('in_use')+'</span>' : (t.valid ? t('available') : '<span style="color:var(--brand)">'+t('invalid')+'</span>')}</td>
-      <td>${t.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${t.name}')">${t('use')}</button> <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${t.name}')">${t('delete')}</button>` : ''}</td>
+      <td>${escapeHtml(th.name)}${tag}</td>
+      <td>${active ? '<span style="color:var(--accent)">'+t('in_use')+'</span>' : (th.valid ? t('available') : '<span style="color:var(--brand)">'+t('invalid')+'</span>')}</td>
+      <td>${th.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${th.name}')">${t('use')}</button> <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${th.name}')">${t('delete')}</button>` : ''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="3">'+t('no_themes')+'</td></tr>';
 }
@@ -1154,19 +1293,21 @@ async function installTheme(){
 async function loadProxy(){
   const r = await apiFetch('/api/proxy');
   const d = await r.json();
-  document.getElementById('proxyHttp').value = d.http || '';
-  document.getElementById('proxyHttps').value = d.https || '';
+  // 若 http 与 https 相同则填入单一地址; 否则优先 http
+  const addr = (d.http && d.http === d.https) ? d.http : (d.http || d.https || '');
+  document.getElementById('proxyAddr').value = addr || '';
   document.getElementById('proxyNo').value = d.no_proxy || 'localhost,127.0.0.1';
 }
 async function saveProxy(){
   const msg = document.getElementById('proxyMsg');
   msg.textContent = t('saving');
+  const addr = document.getElementById('proxyAddr').value.trim();
   const r = await apiFetch('/api/proxy', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
-      http: document.getElementById('proxyHttp').value.trim(),
-      https: document.getElementById('proxyHttps').value.trim(),
-      no_proxy: document.getElementById('proxyNo').value.trim()
+      http: addr,
+      https: addr,
+      no_proxy: document.getElementById('proxyNo').value.trim() || 'localhost,127.0.0.1'
     })
   });
   const d = await r.json();

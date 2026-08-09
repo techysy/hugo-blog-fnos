@@ -127,7 +127,8 @@ start() {
         --source "${BLOG_DIR}" \
         --bind 0.0.0.0 -p "${PORT}" \
         --buildDrafts --disableFastRender --ignoreCache \
-        >> "${LOG}" 2>&1 &
+        2>&1 | awk '{ print strftime("[%Y-%m-%d %H:%M:%S]") " " $0; fflush() }' \
+        >> "${LOG}" &
     echo $! > "${PID_FILE}"
     sleep 2
     if kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
