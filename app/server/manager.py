@@ -25,7 +25,7 @@ from pathlib import Path
 BLOG_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/vol4/@appdata/hugo-blog/blog")
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 13134
 # 应用版本 (与 manifest 保持一致, 用于品牌区/仪表板显示)
-APP_VERSION = "0.1.4.8"
+APP_VERSION = "0.1.4.9"
 CONTENT_DIR = BLOG_DIR / "content"
 POST_DIR = CONTENT_DIR / "post"
 THEMES_DIR = BLOG_DIR / "themes"
@@ -365,16 +365,18 @@ def build_api_doc():
 
 
 def rebuild_site():
-    """触发 hugo 重建 (调用 cmd/main rebuild, 仅重建 hugo 不动 manager)."""
+    """触发 hugo 重建 (调用 cmd/main rebuild, 仅重建 hugo 不动 manager).
+
+    异步触发后台重建, 立即返回 (避免 hugo 首次构建超时). 前端稍后刷新确认.
+    """
     try:
         import subprocess
-        r = subprocess.run(
+        # 后台异步执行, 不阻塞接口; rebuild 会 pkill hugo + 重新 start
+        p = subprocess.Popen(
             ["bash", str(CMD_MAIN), "rebuild"],
-            capture_output=True, text=True, timeout=60,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        ok = r.returncode == 0
-        out = (r.stdout or "").strip().splitlines()
-        return ok, (out[-1] if out else ""), r.stderr or ""
+        return True, "重建已触发，正在后台执行…", ""
     except Exception as e:
         return False, "", str(e)
 
@@ -428,6 +430,19 @@ def get_or_create_token():
 
 API_TOKEN = get_or_create_token()
 
+
+def recreate_token():
+    """重新生成 API token (写入文件并更新内存, 立即生效, 无需重启)."""
+    global API_TOKEN
+    new = secrets.token_hex(16)
+    try:
+        TOKEN_FILE.write_text(new, encoding="utf-8")
+        os.chmod(TOKEN_FILE, 0o600)
+        API_TOKEN = new
+        return new, None
+    except OSError as e:
+        return None, str(e)
+
 # 生成安全的 slug (文件名)
 def slugify(title):
     s = title.strip().lower()
@@ -462,6 +477,13 @@ def list_posts():
                 "date": date,
                 "size": len(raw),
             })
+    # 按 front matter 的 date 降序排列 (最新在前); 无 date 的排最后
+    def _sort_key(p):
+        d = p["date"].strip().strip("\"'")
+        # 取日期时间部分 (YYYY-MM-DDTHH:MM:SS), 去掉时区偏移, 便于字符串比较
+        base = d[:19] if d else ""
+        return base
+    posts.sort(key=_sort_key, reverse=True)
     return posts
 
 
@@ -547,8 +569,46 @@ def list_themes():
     return themes
 
 
+def _dart_sass_dir():
+    """定位打包的 dart-sass 目录 (供 SCSS 主题构建用)."""
+    for c in [str(BLOG_DIR.parent / "server" / "dart-sass"), "/vol4/@appcenter/hugo-blog/server/dart-sass"]:
+        if os.path.isdir(c) and os.access(os.path.join(c, "sass"), os.X_OK):
+            return c
+    return None
+
+
+def _theme_build_check():
+    """用 hugo 一次性构建验证当前 config 的主题能否成功构建.
+
+    构建到临时目录, 避免影响运行中 server 的 public. 返回 (ok, 错误信息).
+    """
+    import subprocess, tempfile
+    dart = _dart_sass_dir()
+    env = dict(os.environ)
+    if dart:
+        env["PATH"] = dart + os.pathsep + env.get("PATH", "")
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            r = subprocess.run(
+                [HUGO_BIN, "--source", str(BLOG_DIR), "--destination", tmp,
+                 "--logLevel", "error", "--ignoreCache", "--quiet"],
+                env=env, capture_output=True, text=True, timeout=90,
+            )
+            out = (r.stdout or "") + (r.stderr or "")
+            if r.returncode != 0:
+                return False, out.strip().splitlines()[-1] if out.strip() else "构建失败"
+            if "ERROR" in out:
+                return False, out.strip().splitlines()[-1] if out.strip() else "构建失败"
+            return True, None
+    except Exception as e:
+        return False, str(e)
+
+
 def switch_theme(name):
-    """切换主题 (改 config.toml 的 theme 字段). 支持传统主题名 或 module 路径."""
+    """切换主题 (改 config.toml 的 theme 字段). 支持传统主题名 或 module 路径.
+
+    切换后自动验证能否成功构建; 若失败则回滚到原主题, 避免博客被不兼容主题搞挂.
+    """
     if not name or name.startswith("."):
         return False, "主题名无效"
     is_module = "/" in name
@@ -556,6 +616,7 @@ def switch_theme(name):
         target = THEMES_DIR / name
         if not target.is_dir() or (not (target / "theme.toml").exists() and not (target / "layouts").exists()):
             return False, "主题不存在或无效"
+    old_theme = current_theme()
     try:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         txt = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
@@ -565,9 +626,22 @@ def switch_theme(name):
             # 追加到 config.toml
             txt = txt.rstrip() + f'\ntheme = "{name}"\n'
         CONFIG_FILE.write_text(txt, encoding="utf-8")
-        return True, None
     except OSError as e:
         return False, str(e)
+
+    # 验证新主题能否构建; 失败则回滚
+    ok, err = _theme_build_check()
+    if ok:
+        return True, None
+    # 回滚到原主题
+    try:
+        txt = CONFIG_FILE.read_text(encoding="utf-8") if CONFIG_FILE.exists() else ""
+        if re.search(r'^\s*theme\s*=', txt, re.M):
+            txt = re.sub(r'^\s*theme\s*=\s*.*$', f'theme = "{old_theme}"', txt, count=1, flags=re.M)
+        CONFIG_FILE.write_text(txt, encoding="utf-8")
+    except OSError:
+        pass
+    return False, f"主题「{name}」无法构建，已回滚到「{old_theme}」: {err or '构建失败'}"
 
 
 def upload_theme(zip_data, filename):
@@ -895,6 +969,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send(200, json.dumps({"ok": True, "msg": msg}))
             else:
                 self._send(500, json.dumps({"error": err or msg or "重建失败"}))
+        elif path == "/api/token/recreate":
+            # 重新生成 API token (手动「创建 token」按钮, 需认证)
+            new, err = recreate_token()
+            if new:
+                self._send(200, json.dumps({"ok": True, "token": new}))
+            else:
+                self._send(500, json.dumps({"error": err or "创建 token 失败"}))
         elif path == "/api/theme/upload":
             # 处理 multipart/form-data 文件上传 (手写解析, 零依赖)
             try:
@@ -995,9 +1076,9 @@ INDEX_HTML = """<!DOCTYPE html>
 body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
 .layout{display:flex;min-height:100vh}
 .sidebar{width:200px;background:var(--card);border-right:1px solid var(--border);padding:16px 10px;flex-shrink:0}
-.sidebar .brand{font-size:15px;font-weight:700;padding:4px 12px 14px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
-.sidebar .brand-ver{font-size:11px;font-weight:400;color:var(--muted);line-height:1}
-.nav-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--muted);margin-bottom:2px}
+.sidebar .brand{font-size:16px;font-weight:700;padding:4px 12px 14px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.sidebar .brand-ver{font-size:12px;font-weight:400;color:var(--muted);line-height:1}
+.nav-item{display:flex;align-items:center;gap:8px;padding:11px 12px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--muted);margin-bottom:2px}
 .nav-item.active{background:rgba(56,189,248,.12);color:var(--accent);font-weight:600}
 .main{flex:1;padding:16px;min-width:0;display:flex;flex-direction:column;min-height:100vh}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px}
@@ -1007,6 +1088,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang 
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;border:none}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
+/* 仪表盘全屏适配: 填满视口, 日志控制台占剩余空间, 无需下拉 */
+#tab-dash.active{display:flex;flex-direction:column;height:calc(100vh - 32px);overflow:hidden}
+#tab-dash>.panel{flex-shrink:0}
+#tab-dash>.panel:last-child{flex:1;display:flex;flex-direction:column;margin-bottom:0;min-height:0}
+#tab-dash .log-view{flex:1;min-height:0;max-height:none}
 /* 日志控制台 控件区 + 显示区 (响应式) */
 .log-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .log-controls select,.log-controls button{flex:0 0 auto}
@@ -1041,7 +1127,8 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 /* 子标签页 (设置内: 仪表板/代理) */
 .subtabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
 .subtab{padding:7px 16px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--muted);cursor:pointer;font-size:13px}
-.subtab.active{background:var(--brand);color:#fff;font-weight:600;border-color:var(--brand)}
+/* 选中样式与侧边栏导航同步 (浅色底 + 彩色文字) */
+.subtab.active{background:rgba(56,189,248,.12);color:var(--accent);font-weight:600;border-color:rgba(56,189,248,.3)}
 .subpanel{display:none}
 .subpanel.active{display:block}
 /* 服务状态卡片 */
@@ -1060,7 +1147,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <body data-theme="light">
 <div class="layout">
   <div class="sidebar" id="sidebar">
-    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.8</div></div>
+    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.9</div></div>
     <div class="nav-item active" onclick="switchNav('dash')" data-i18n="nav_dash">📊 仪表板</div>
     <div class="nav-item" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
@@ -1084,8 +1171,10 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <div class="stat-grid" id="statGrid"></div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap">
           <button class="btn secondary" onclick="rebuildSite()" data-i18n="rebuild_btn">🔄 重建站点</button>
+          <button class="btn secondary" onclick="createToken()" data-i18n="token_btn">🔑 创建 token</button>
           <span class="hint" id="rebuildMsg" style="margin:0"></span>
         </div>
+        <div class="hint" id="tokenMsg" style="margin-top:8px;display:none"></div>
       </div>
       <div class="panel">
         <h2 data-i18n="console_title">📜 日志控制台</h2>
@@ -1201,6 +1290,7 @@ const I18N = {
     api_title:'🤖 API 使用指南', api_hint:'以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。', api_copy:'📋 复制文档', api_copied:'✓ 已复制到剪贴板',
     stat_hugo:'Hugo 服务', stat_manager:'管理面板', stat_blog_port:'博客端口', stat_admin_port:'管理端口', stat_version:'Hugo 版本', stat_posts:'文章', stat_themes:'主题', stat_cur_theme:'当前主题', stat_running:'运行中', stat_stopped:'已停止',
     rebuild_btn:'🔄 重建站点', rebuilding:'正在重建…', rebuild_done:'✓ 已重建', rebuild_fail:'重建失败:',
+    token_btn:'🔑 创建 token', token_creating:'正在生成新 token…', token_done:'✓ 新 token (立即生效):', token_fail:'创建失败:',
     saving:'保存中…', saved:'✓ 已保存:', rendering:'(Hugo 自动渲染中)', save_fail:'保存失败', deleting:'删除中…', deleted:'✓ 已删除主题:', delete_fail:'删除失败', del_confirm:'确定删除主题「{name}」吗？',
     switching:'切换中…', switched:'✓ 已切换到主题:', switch_fail:'切换失败', uploading:'上传中…', uploaded:'✓ 主题已上传:', upload_fail:'上传失败', pls_zip:'请选择 zip 文件', no_theme:'请输入 git 地址或 module 路径', installing:'安装中… (可能需要一些时间)', installed:'✓ 主题已安装:', deps:'依赖', install_fail:'安装失败', invalid_install:'无法识别：请输入 git 仓库地址 或 Hugo module 路径',
     proxy_saved:'✓ 代理设置已保存（重启应用生效）', proxy_save_fail:'保存失败', loading_log:'加载中…', load_log_fail:'加载日志失败:', log_read_fail:'读取失败', no_log:'无日志内容', no_log_data:'(暂无日志)', load_list_fail:'加载日志列表失败:', log_fmt:'{src} 日志 · {disp} · 共 {total} 行',
@@ -1219,6 +1309,7 @@ const I18N = {
     api_title:'🤖 API Guide', api_hint:'Markdown doc of the admin REST API, copy-paste for an agent.', api_copy:'📋 Copy Doc', api_copied:'✓ Copied to clipboard',
     stat_hugo:'Hugo Service', stat_manager:'Admin Panel', stat_blog_port:'Blog Port', stat_admin_port:'Admin Port', stat_version:'Hugo Version', stat_posts:'Posts', stat_themes:'Themes', stat_cur_theme:'Current Theme', stat_running:'Running', stat_stopped:'Stopped',
     rebuild_btn:'🔄 Rebuild', rebuilding:'Rebuilding…', rebuild_done:'✓ Rebuilt', rebuild_fail:'Rebuild failed:',
+    token_btn:'🔑 Create Token', token_creating:'Generating new token…', token_done:'✓ New token (effective now):', token_fail:'Failed:',
     saving:'Saving…', saved:'✓ Saved:', rendering:'(Hugo re-rendering)', save_fail:'Save failed', deleting:'Deleting…', deleted:'✓ Deleted theme:', delete_fail:'Delete failed', del_confirm:'Delete theme "{name}"?',
     switching:'Switching…', switched:'✓ Switched to:', switch_fail:'Switch failed', uploading:'Uploading…', uploaded:'✓ Uploaded:', upload_fail:'Upload failed', pls_zip:'Select a zip file', no_theme:'Enter git URL or module path', installing:'Installing… (may take a while)', installed:'✓ Installed:', deps:'deps', install_fail:'Install failed', invalid_install:'Unrecognized: enter a git repo URL or a Hugo module path',
     proxy_saved:'✓ Proxy saved (takes effect after restart)', proxy_save_fail:'Save failed', loading_log:'Loading…', load_log_fail:'Failed to load log:', log_read_fail:'Read failed', no_log:'No log content', no_log_data:'(no log)', load_list_fail:'Failed to load log list:', log_fmt:'{src} log · {disp} · {total} lines',
@@ -1361,13 +1452,30 @@ async function rebuildSite(){
     const r = await apiFetch('/api/rebuild', {method:'POST'});
     const d = await r.json();
     if(d.ok){
-      if(msg) msg.textContent = t('rebuild_done');
-      setTimeout(()=>{ loadStatus(); loadLogDates(); }, 1500); // 重建后刷新状态
+      if(msg) msg.textContent = t('rebuild_done'); // 已触发, 后台执行
+      // hugo 首次构建可能较慢, 稍等后再刷新状态/日志
+      setTimeout(()=>{ loadStatus(); loadLogDates(); }, 8000);
     } else {
       if(msg) msg.textContent = t('rebuild_fail') + ' ' + (d.error||'');
     }
   }catch(e){
     if(msg) msg.textContent = t('rebuild_fail') + ' ' + e;
+  }
+}
+// 创建新 API token (仪表盘「创建 token」按钮)
+async function createToken(){
+  const el = document.getElementById('tokenMsg');
+  if(el){ el.style.display='block'; el.textContent = t('token_creating'); }
+  try{
+    const r = await apiFetch('/api/token/recreate', {method:'POST'});
+    const d = await r.json();
+    if(d.ok && d.token){
+      if(el) el.textContent = t('token_done') + ' ' + d.token;
+    } else {
+      if(el) el.textContent = t('token_fail') + ' ' + (d.error||'');
+    }
+  }catch(e){
+    if(el) el.textContent = t('token_fail') + ' ' + e;
   }
 }
 // 汉堡菜单 (移动端)
