@@ -361,6 +361,18 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang 
 .main{flex:1;padding:16px;min-width:0}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
 .topbar h1{font-size:20px}
+/* Tab 分页导航 (参考 strava 切换风格) */
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tab-btn{padding:8px 16px;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s}
+.tab-btn.active{border-color:var(--brand);color:var(--brand);background:var(--card);font-weight:700}
+.tab-btn:hover{opacity:.85}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+/* 分页控件 */
+.pager{display:flex;align-items:center;gap:8px;margin-top:12px;justify-content:center}
+.pager button{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card2);color:var(--text);cursor:pointer;font-size:12px}
+.pager button:disabled{opacity:.4;cursor:not-allowed}
+.pager .pager-info{font-size:12px;color:var(--muted)}
 .btn{padding:8px 14px;border:none;border-radius:8px;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer}
 .btn.secondary{background:var(--card2);color:var(--text)}
 .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
@@ -389,33 +401,49 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <a class="btn secondary" href="http://" onclick="location='http://'+location.hostname+':13133/';return false" target="_blank" style="text-decoration:none">查看博客</a>
       </div>
     </div>
-    <div class="panel">
-      <h2>✍️ 新建文章</h2>
-      <label>标题 *</label><input id="title" placeholder="文章标题">
-      <label>标签 (逗号分隔)</label><input id="tags" placeholder="hugo, fnos">
-      <label>内容 (Markdown)</label><textarea id="content" placeholder="# 标题&#10;正文..."></textarea>
-      <div class="msg" id="msg"></div>
-      <button class="btn" onclick="createPost()" style="margin-top:14px">保存并发布</button>
-      <div class="hint">保存后 Hugo 会自动重新渲染，稍等片刻刷新博客即可看到。</div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('write', this)">✍️ 写文章</button>
+      <button class="tab-btn" onclick="switchTab('posts', this)">📄 文章列表</button>
+      <button class="tab-btn" onclick="switchTab('theme', this)">🎨 主题</button>
     </div>
-    <div class="panel">
-      <h2>📄 文章列表</h2>
-      <table id="postsTable">
-        <thead><tr><th>标题</th><th>日期</th><th>文件名</th></tr></thead>
-        <tbody></tbody>
-      </table>
+    <div class="tab-panel active" id="tab-write">
+      <div class="panel">
+        <h2>✍️ 新建文章</h2>
+        <label>标题 *</label><input id="title" placeholder="文章标题">
+        <label>标签 (逗号分隔)</label><input id="tags" placeholder="hugo, fnos">
+        <label>内容 (Markdown)</label><textarea id="content" placeholder="# 标题&#10;正文..."></textarea>
+        <div class="msg" id="msg"></div>
+        <button class="btn" onclick="createPost()" style="margin-top:14px">保存并发布</button>
+        <div class="hint">保存后 Hugo 会自动重新渲染，稍等片刻刷新博客即可看到。</div>
+      </div>
     </div>
-    <div class="panel">
-      <h2>🎨 主题管理 <span id="curTheme" style="font-size:12px;color:var(--muted);font-weight:400"></span></h2>
-      <table id="themesTable">
-        <thead><tr><th>主题</th><th>状态</th><th>操作</th></tr></thead>
-        <tbody></tbody>
-      </table>
-      <div class="msg" id="themeMsg"></div>
-      <label>上传主题 (zip 包)</label>
-      <input type="file" id="themeFile" accept=".zip">
-      <button class="btn" onclick="uploadTheme()" style="margin-top:10px">上传主题</button>
-      <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
+    <div class="tab-panel" id="tab-posts">
+      <div class="panel">
+        <h2>📄 文章列表</h2>
+        <table id="postsTable">
+          <thead><tr><th>标题</th><th>日期</th><th>文件名</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="pager" id="pager" style="display:none">
+          <button id="prevPage" onclick="changePage(-1)">‹ 上一页</button>
+          <span class="pager-info" id="pagerInfo"></span>
+          <button id="nextPage" onclick="changePage(1)">下一页 ›</button>
+        </div>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-theme">
+      <div class="panel">
+        <h2>🎨 主题管理 <span id="curTheme" style="font-size:12px;color:var(--muted);font-weight:400"></span></h2>
+        <table id="themesTable">
+          <thead><tr><th>主题</th><th>状态</th><th>操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="msg" id="themeMsg"></div>
+        <label>上传主题 (zip 包)</label>
+        <input type="file" id="themeFile" accept=".zip">
+        <button class="btn" onclick="uploadTheme()" style="margin-top:10px">上传主题</button>
+        <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
+      </div>
     </div>
   </div>
 </div>
@@ -438,10 +466,45 @@ async function initToken(){
 async function loadPosts(){
   const r = await apiFetch('/api/posts');
   const d = await r.json();
+  allPosts = d.posts || [];
+  renderPosts();
+}
+// 文章列表分页
+let allPosts = [];
+let currentPage = 1;
+const PAGE_SIZE = 10;
+function renderPosts(){
+  const totalPages = Math.max(1, Math.ceil(allPosts.length / PAGE_SIZE));
+  if(currentPage > totalPages) currentPage = totalPages;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pagePosts = allPosts.slice(start, start + PAGE_SIZE);
   const tbody = document.querySelector('#postsTable tbody');
-  tbody.innerHTML = (d.posts||[]).map(p=>
+  tbody.innerHTML = pagePosts.map(p=>
     `<tr><td>${escapeHtml(p.title)}</td><td>${p.date||'-'}</td><td>${p.filename}</td></tr>`
   ).join('') || '<tr><td colspan="3">暂无文章</td></tr>';
+  const pager = document.getElementById('pager');
+  if(allPosts.length > PAGE_SIZE){
+    pager.style.display = 'flex';
+    document.getElementById('pagerInfo').textContent = `${currentPage} / ${totalPages}`;
+    document.getElementById('prevPage').disabled = currentPage <= 1;
+    document.getElementById('nextPage').disabled = currentPage >= totalPages;
+  } else {
+    pager.style.display = 'none';
+  }
+}
+function changePage(delta){
+  currentPage += delta;
+  renderPosts();
+}
+// tab 切换
+function switchTab(tab, btn){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('tab-' + tab);
+  if(panel) panel.classList.add('active');
+  if(tab === 'posts') loadPosts();
+  if(tab === 'theme') loadThemes();
 }
 async function createPost(){
   const msg = document.getElementById('msg');
@@ -476,7 +539,7 @@ async function loadThemes(){
     return `<tr>
       <td>${escapeHtml(t.name)}</td>
       <td>${active ? '<span style="color:var(--accent)">✓ 使用中</span>' : (t.valid ? '可用' : '<span style="color:var(--brand)">无效</span>')}</td>
-      <td>${t.valid && !active ? '<button class="btn secondary" onclick="switchTheme(\''+escapeHtml(t.name)+'\')">使用</button>' : ''}</td>
+      <td>${t.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${t.name}')">使用</button>` : ''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="3">暂无主题，请上传</td></tr>';
 }
