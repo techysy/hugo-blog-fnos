@@ -25,7 +25,7 @@ from pathlib import Path
 BLOG_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/vol4/@appdata/hugo-blog/blog")
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 13134
 # 应用版本 (与 manifest 保持一致, 用于品牌区/仪表板显示)
-APP_VERSION = "0.1.4.10"
+APP_VERSION = "0.1.4.11"
 CONTENT_DIR = BLOG_DIR / "content"
 POST_DIR = CONTENT_DIR / "post"
 THEMES_DIR = BLOG_DIR / "themes"
@@ -1076,23 +1076,25 @@ INDEX_HTML = """<!DOCTYPE html>
 body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
 .layout{display:flex;min-height:100vh}
 .sidebar{width:200px;background:var(--card);border-right:1px solid var(--border);padding:16px 10px;flex-shrink:0}
-.sidebar .brand{font-size:16px;font-weight:700;padding:4px 12px 14px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
-.sidebar .brand-ver{font-size:12px;font-weight:400;color:var(--muted);line-height:1}
+.sidebar .brand{font-size:16px;font-weight:700;padding:4px 12px 14px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;flex-direction:column;align-items:flex-start}
+.sidebar .brand-ver{font-size:12px;font-weight:400;color:var(--muted);line-height:1;margin-top:4px}
 .nav-item{display:flex;align-items:center;gap:8px;padding:11px 12px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--muted);margin-bottom:2px}
 .nav-item.active{background:rgba(56,189,248,.12);color:var(--accent);font-weight:600}
-.main{flex:1;padding:16px;min-width:0;display:flex;flex-direction:column;min-height:100vh}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px}
 .topbar h1{font-size:20px}
 /* 汉堡菜单 (移动端) */
 .hamburger{display:none;background:none;border:none;font-size:20px;color:var(--text);cursor:pointer;padding:4px 6px}
-.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;border:none}
+.main{flex:1;padding:16px;min-width:0;display:flex;flex-direction:column;height:100vh;overflow:hidden;box-sizing:border-box}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
-/* 仪表盘全屏适配: 填满视口, 日志控制台占剩余空间, 无需下拉 */
-#tab-dash.active{display:flex;flex-direction:column;height:calc(100vh - 32px);overflow:hidden}
+/* 其他 tab 内容超高时内部滚动 */
+#tab-write.active,#tab-posts.active,#tab-settings.active{overflow-y:auto}
+/* 仪表盘: 填满视口(不滚动), 日志控制台卡片收窄居中 */
+#tab-dash.active{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 #tab-dash>.panel{flex-shrink:0}
-#tab-dash>.panel:last-child{flex:1;display:flex;flex-direction:column;margin-bottom:0;min-height:0}
-#tab-dash .log-view{flex:1;min-height:0;max-height:none}
+/* 📜 日志控制台卡片: 默认宽度不占满, 收窄居中 */
+#tab-dash>.panel:last-child{flex:1;display:flex;flex-direction:column;margin-bottom:0;min-height:0;max-width:1100px;width:100%;margin-left:auto;margin-right:auto}
+#tab-dash .log-view{flex:1;min-height:0;max-height:none;overflow-y:auto}
 /* 日志控制台 控件区 + 显示区 (响应式) */
 .log-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .log-controls select,.log-controls button{flex:0 0 auto}
@@ -1157,7 +1159,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <body data-theme="light">
 <div class="layout">
   <div class="sidebar" id="sidebar">
-    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.10</div></div>
+    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.11</div></div>
     <div class="nav-item active" onclick="switchNav('dash')" data-i18n="nav_dash">📊 仪表板</div>
     <div class="nav-item" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
@@ -1190,11 +1192,11 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <h2 data-i18n="console_title">📜 日志控制台</h2>
         <div class="log-controls">
           <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
-            <option value="hugo">Hugo 日志</option>
-            <option value="manager">管理面板日志</option>
+            <option value="hugo" data-i18n="log_src_hugo">Hugo 日志</option>
+            <option value="manager" data-i18n="log_src_manager">管理面板日志</option>
           </select>
           <select id="logDate" onchange="loadLogs()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
-            <option value="">当前</option>
+            <option value="" data-i18n="current">当前</option>
           </select>
           <button class="btn secondary" onclick="loadLogs()" data-i18n="refresh">🔄 刷新</button>
           <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
@@ -1292,7 +1294,7 @@ const I18N = {
     install_online_label:'在线安装 (git 仓库 或 Hugo Module)', install_btn:'安装', install_hint:'git 地址自动克隆，module 路径自动下载；联网后自动检测依赖（module/sass）。',
     upload_label:'上传主题 zip 包', upload_note:'(用于无法使用 GitHub 的场景)', upload_btn:'上传主题', upload_hint:'上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。',
     proxy_title:'⚙️ 代理设置', proxy_hint:'用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。', proxy_addr_label:'代理地址 (HTTP/HTTPS 共用)', noproxy_label:'NO_PROXY', noproxy_optional:'(可选)', save_proxy:'保存代理设置', proxy_restart_hint:'保存后重启应用生效（下载 module 时使用）。',
-    console_title:'📜 日志控制台', refresh:'🔄 刷新', download:'⬇️ 下载', current:'当前', console_hint:'日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。',
+    console_title:'📜 日志控制台', refresh:'🔄 刷新', download:'⬇️ 下载', current:'当前', log_src_hugo:'Hugo 日志', log_src_manager:'管理面板日志', console_hint:'日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。',
     sub_proxy:'⚙️ 代理', sub_api:'🤖 API', dash_title:'📊 服务状态',
     api_title:'🤖 API 使用指南', api_hint:'以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。', api_copy:'📋 复制文档', api_copied:'✓ 已复制到剪贴板',
     stat_hugo:'Hugo 服务', stat_manager:'管理面板', stat_blog_port:'博客端口', stat_admin_port:'管理端口', stat_version:'Hugo 版本', stat_posts:'文章', stat_themes:'主题', stat_cur_theme:'当前主题', stat_running:'运行中', stat_stopped:'已停止',
@@ -1311,7 +1313,7 @@ const I18N = {
     install_online_label:'Install Online (git repo or Hugo Module)', install_btn:'Install', install_hint:'git URL clones, module path downloads; auto-detects deps (module/sass) when online.',
     upload_label:'Upload theme zip', upload_note:'(for when GitHub is unavailable)', upload_btn:'Upload', upload_hint:'Zip must contain one theme dir (theme.toml or layouts).',
     proxy_title:'⚙️ Proxy Settings', proxy_hint:'Proxy used when Hugo downloads module theme deps (docuapi etc). Leave empty for direct.', proxy_addr_label:'Proxy address (shared HTTP/HTTPS)', noproxy_label:'NO_PROXY', noproxy_optional:'(optional)', save_proxy:'Save Proxy', proxy_restart_hint:'Takes effect after app restart (used when downloading modules).',
-    console_title:'📜 Log Console', refresh:'🔄 Refresh', download:'⬇️ Download', current:'Current', console_hint:'Logs are archived by date. Current file keeps today only; history moves to data/logs/.',
+    console_title:'📜 Log Console', refresh:'🔄 Refresh', download:'⬇️ Download', current:'Current', log_src_hugo:'Hugo Log', log_src_manager:'Admin Log', console_hint:'Logs are archived by date. Current file keeps today only; history moves to data/logs/.',
     sub_proxy:'⚙️ Proxy', sub_api:'🤖 API', dash_title:'📊 Service Status',
     api_title:'🤖 API Guide', api_hint:'Markdown doc of the admin REST API, copy-paste for an agent.', api_copy:'📋 Copy Doc', api_copied:'✓ Copied to clipboard',
     stat_hugo:'Hugo Service', stat_manager:'Admin Panel', stat_blog_port:'Blog Port', stat_admin_port:'Admin Port', stat_version:'Hugo Version', stat_posts:'Posts', stat_themes:'Themes', stat_cur_theme:'Current Theme', stat_running:'Running', stat_stopped:'Stopped',
@@ -1657,7 +1659,7 @@ async function loadLogDates(){
     logDates = d.dates || [];
     const dateSel = document.getElementById('logDate');
     const prev = dateSel.value;
-    dateSel.innerHTML = '<option value="">当前</option>' + logDates.map(x=>
+    dateSel.innerHTML = '<option value="">'+t('current')+'</option>' + logDates.map(x=>
       `<option value="${x.date}" ${x.date===prev?'selected':''}>${x.display}</option>`
     ).join('');
     // 若之前选中了某个历史日期, 保持; 否则加载当前
