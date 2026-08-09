@@ -238,128 +238,132 @@ def _pid_alive(pid):
         return False
 
 
-def build_api_doc():
-    """生成 API 使用指南 Markdown 文档 (供设置页 API 标签展示/复制)."""
+def build_api_doc(lang="zh"):
+    """生成 API 使用指南 Markdown 文档 (中/英), 供设置页 API 标签展示/复制."""
     base = "http://<NAS-IP>:13134"
+    en = lang != "zh"
+    # 文案 (中/英)
+    T = {
+        "title": "# Hugo Blog 管理面板 API 指南" if not en else "# Hugo Blog Admin API Guide",
+        "intro": "> 管理面板端口 **13134**。除 `/api/bootstrap` 外，所有接口需 `Authorization: Bearer <token>`。" if not en else "> Admin port **13134**. All endpoints except `/api/bootstrap` require `Authorization: Bearer <token>`.",
+        "intro2": "> **解析 JSON 用 python3**（fnOS 及多数系统自带），无需 jq。" if not en else "> Parse JSON with **python3** (built-in on fnOS & most systems), no jq needed.",
+        "s1": "## 1. 一键测试脚本 (推荐, 复制即用)" if not en else "## 1. One-shot test script (recommended)",
+        "s1h": "保存为 `test-api.sh`，`chmod +x test-api.sh` 后运行：" if not en else "Save as `test-api.sh`, `chmod +x test-api.sh` and run:",
+        "s1c": "# Hugo Blog API 一键测试 (curl + python3, 无需 jq)" if not en else "# Hugo Blog API test (curl + python3, no jq)",
+        "s1f": "获取 token 失败" if not en else "Failed to get token",
+        "s1i": "== 服务状态 /api/info ==" if not en else "== Status /api/info ==",
+        "s1p": "== 文章数 /api/posts ==" if not en else "== Posts /api/posts ==",
+        "s1pn": "文章数:" if not en else "posts:",
+        "s1t": "== 当前主题 /api/themes ==" if not en else "== Current theme /api/themes ==",
+        "s1tn": "当前:" if not en else "current:",
+        "s1l": "== 最近日志 /api/logs ==" if not en else "== Recent logs /api/logs ==",
+        "s1d": "== 测试完成 ==" if not en else "== Done ==",
+        "s2": "## 2. 各接口单独调用" if not en else "## 2. Endpoints",
+        "t1": "### 2.1 获取 Token" if not en else "### 2.1 Get Token",
+        "t2": "### 2.2 服务状态" if not en else "### 2.2 Service Status",
+        "t3": "### 2.3 文章" if not en else "### 2.3 Posts",
+        "t3n": "# 新建文章 (JSON 用文件, 见下方 post.json 示例)" if not en else "# Create post (JSON via file, see post.json below)",
+        "t3r": "# 重新生成 token (管理面板按钮)" if not en else "# Recreate token (admin button)",
+        "t4": "### 2.4 主题" if not en else "### 2.4 Themes",
+        "t4s": "# 切换主题 (JSON 用文件, 见下方 theme.json 示例)" if not en else "# Switch theme (JSON via file, see theme.json below)",
+        "t4i": "# 在线安装: git 仓库 / Hugo Module" if not en else "# Install: git repo / Hugo Module",
+        "t4d": "# 删除主题" if not en else "# Delete theme",
+        "t5": "### 2.5 日志 (控制台)" if not en else "### 2.5 Logs (console)",
+        "t6": "### 2.6 代理设置" if not en else "### 2.6 Proxy",
+        "t6s": "# 设置代理 (HTTP/HTTPS 共用同一地址)" if not en else "# Set proxy (shared HTTP/HTTPS)",
+        "t7": "### 2.7 站点重建" if not en else "### 2.7 Rebuild site",
+        "t8": "### 2.8 API 指南" if not en else "### 2.8 API Guide",
+        "json": "## JSON 参数文件示例" if not en else "## JSON param file examples",
+        "auth": "## 认证说明" if not en else "## Auth notes",
+        "auth1": "- token 存于数据目录 `api_token`，删除后重启应用会重新生成。" if not en else "- Token stored at data dir `api_token`; deleting it regenerates on restart.",
+        "auth2": "- 未认证请求返回 `401 unauthorized`。" if not en else "- Unauthenticated requests return `401 unauthorized`.",
+    }
     lines = [
-        "# Hugo Blog 管理面板 API 指南",
-        "",
-        "> 管理面板端口 **13134**。除 `/api/bootstrap` 外，所有接口需 `Authorization: Bearer <token>`。",
-        "> **解析 JSON 用 python3**（fnOS 及多数系统自带），无需 jq；若已装 jq 可把 `python3 -m json.tool` 换成 `jq`。",
-        "",
-        "## 1. 一键测试脚本 (推荐, 复制即用)",
-        "保存为 `test-api.sh`，`chmod +x test-api.sh` 后运行：",
+        T["title"], "",
+        T["intro"], T["intro2"], "",
+        T["s1"], T["s1h"],
         "```bash",
-        "#!/usr/bin/env bash",
-        "# Hugo Blog API 一键测试 (curl + python3, 无需 jq)",
-        "set -u",
+        "#!/usr/bin/env bash", T["s1c"], "set -u",
         'BASE="' + base + '"',
         'TOKEN=$(curl -s "$BASE/api/bootstrap" | python3 -c "import sys,json;print(json.load(sys.stdin).get(\'api_token\',\'\'))")',
-        'if [ -z "$TOKEN" ]; then echo "获取 token 失败"; exit 1; fi',
+        'if [ -z "$TOKEN" ]; then echo "' + T["s1f"] + '"; exit 1; fi',
         'AUTH="Authorization: Bearer $TOKEN"',
         'echo "Token: ${TOKEN:0:8}..."',
-        'echo; echo "== 服务状态 /api/info =="',
+        'echo; echo "' + T["s1i"] + '"',
         'curl -s -H "$AUTH" "$BASE/api/info" | python3 -m json.tool',
-        'echo; echo "== 文章数 /api/posts =="',
-        'curl -s -H "$AUTH" "$BASE/api/posts" | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'文章数:\',len(d[\'posts\']))"',
-        'echo; echo "== 当前主题 /api/themes =="',
-        'curl -s -H "$AUTH" "$BASE/api/themes" | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'当前:\',d[\'current\'])"',
-        'echo; echo "== 最近日志 /api/logs =="',
+        'echo; echo "' + T["s1p"] + '"',
+        'curl -s -H "$AUTH" "$BASE/api/posts" | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'' + T["s1pn"] + '\',len(d[\'posts\']))"',
+        'echo; echo "' + T["s1t"] + '"',
+        'curl -s -H "$AUTH" "$BASE/api/themes" | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'' + T["s1tn"] + '\',d[\'current\'])"',
+        'echo; echo "' + T["s1l"] + '"',
         'curl -s -H "$AUTH" "$BASE/api/logs?source=hugo&tail=20" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d[\'content\'])"',
-        'echo; echo "== 测试完成 =="',
-        "```",
-        "",
-        "## 2. 各接口单独调用",
-        "",
-        "### 2.1 获取 Token",
+        'echo; echo "' + T["s1d"] + '"',
+        "```", "",
+        T["s2"], "",
+        T["t1"],
         "```bash",
         'TOKEN=$(curl -s ' + base + '/api/bootstrap | python3 -c "import sys,json;print(json.load(sys.stdin).get(\'api_token\',\'\'))")',
         'AUTH="Authorization: Bearer $TOKEN"',
-        "```",
-        "",
-        "### 2.2 服务状态",
+        "```", "",
+        T["t2"],
         "```bash",
         'curl -s -H "$AUTH" ' + base + '/api/info | python3 -m json.tool',
-        "```",
-        "",
-        "### 2.3 文章",
+        "```", "",
+        T["t3"],
         "```bash",
-        'curl -s -H "$AUTH" ' + base + '/api/posts | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'文章数:\',len(d[\'posts\']))"',
-        "# 新建文章 (JSON 用文件, 见下方 post.json 示例)",
+        'curl -s -H "$AUTH" ' + base + '/api/posts | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'' + T["s1pn"] + '\',len(d[\'posts\']))"',
+        T["t3n"],
         'curl -s -X POST ' + base + '/api/new -H "$AUTH" -H "Content-Type: application/json" -d @post.json | python3 -m json.tool',
-        "```",
-        "",
-        "### 2.4 主题",
+        T["t3r"],
+        'curl -s -X POST ' + base + '/api/token/recreate -H "$AUTH" -H "Content-Type: application/json" -d "{}" | python3 -m json.tool',
+        "```", "",
+        T["t4"],
         "```bash",
         'curl -s -H "$AUTH" ' + base + '/api/themes | python3 -m json.tool',
-        "# 切换主题 (JSON 用文件, 见下方 theme.json 示例)",
+        T["t4s"],
         'curl -s -X POST ' + base + '/api/theme/switch -H "$AUTH" -H "Content-Type: application/json" -d @theme.json | python3 -m json.tool',
-        "# 在线安装: git 仓库 / Hugo Module",
+        T["t4i"],
         'curl -s -X POST ' + base + '/api/theme/git -H "$AUTH" -H "Content-Type: application/json" -d @git.json | python3 -m json.tool',
         'curl -s -X POST ' + base + '/api/theme/module -H "$AUTH" -H "Content-Type: application/json" -d @module.json | python3 -m json.tool',
-        "# 删除主题",
+        T["t4d"],
         'curl -s -X POST ' + base + '/api/theme/delete -H "$AUTH" -H "Content-Type: application/json" -d @delete.json | python3 -m json.tool',
-        "```",
-        "",
-        "### 2.5 日志 (控制台)",
+        "```", "",
+        T["t5"],
         "```bash",
         'curl -s -H "$AUTH" "' + base + '/api/logs/list?source=hugo" | python3 -m json.tool',
         'curl -s -H "$AUTH" "' + base + '/api/logs?source=hugo&tail=200" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d[\'content\'])"',
         'curl -s -H "$AUTH" -o hugo.log "' + base + '/api/logs/download?source=hugo"',
-        "```",
-        "",
-        "### 2.6 代理设置",
+        "```", "",
+        T["t6"],
         "```bash",
         'curl -s -H "$AUTH" ' + base + '/api/proxy | python3 -m json.tool',
-        "# 设置代理 (HTTP/HTTPS 共用同一地址)",
+        T["t6s"],
         'curl -s -X POST ' + base + '/api/proxy -H "$AUTH" -H "Content-Type: application/json" -d @proxy.json | python3 -m json.tool',
-        "```",
-        "",
-        "## JSON 参数文件示例",
-        "### post.json",
-        "```json",
-        "{",
-        '  "title": "新文章",',
+        "```", "",
+        T["t7"],
+        "```bash",
+        'curl -s -X POST ' + base + '/api/rebuild -H "$AUTH" | python3 -m json.tool',
+        "```", "",
+        T["t8"],
+        "```bash",
+        'curl -s -H "$AUTH" "' + base + '/api/doc" | python3 -m json.tool',
+        "```", "",
+        T["json"],
+        "### post.json", "```json", "{",
+        '  "title": "' + ("新文章" if not en else "New post") + '",',
         '  "tags": "hugo, fnos",',
-        '  "content": "# 标题"',
-        "}",
-        "```",
-        "### theme.json",
-        "```json",
-        "{",
-        '  "theme": "minimal"',
-        "}",
-        "```",
-        "### git.json",
-        "```json",
-        "{",
-        '  "url": "https://github.com/user/theme.git"',
-        "}",
-        "```",
-        "### module.json",
-        "```json",
-        "{",
-        '  "module": "github.com/bep/docuapi"',
-        "}",
-        "```",
-        "### delete.json",
-        "```json",
-        "{",
-        '  "theme": "old-theme"',
-        "}",
-        "```",
-        "### proxy.json",
-        "```json",
-        "{",
+        '  "content": "' + ("# 标题" if not en else "# Title") + '"',
+        "}", "```",
+        "### theme.json", "```json", "{", '  "theme": "minimal"', "}", "```",
+        "### git.json", "```json", "{", '  "url": "https://github.com/user/theme.git"', "}", "```",
+        "### module.json", "```json", "{", '  "module": "github.com/bep/docuapi"', "}", "```",
+        "### delete.json", "```json", "{", '  "theme": "old-theme"', "}", "```",
+        "### proxy.json", "```json", "{",
         '  "http": "http://192.168.31.31:7890",',
         '  "https": "http://192.168.31.31:7890",',
         '  "no_proxy": "localhost,127.0.0.1"',
-        "}",
-        "```",
-        "",
-        "## 认证说明",
-        "- token 存于数据目录 `api_token`，删除后重启应用会重新生成。",
-        "- 未认证请求返回 `401 unauthorized`。",
+        "}", "```", "",
+        T["auth"], T["auth1"], T["auth2"],
     ]
     return "\n".join(lines)
 
@@ -688,37 +692,40 @@ def upload_theme(zip_data, filename):
 
 
 def delete_theme(name):
-    """删除主题. 支持传统主题 (themes/<name>) 和 module 主题 (从 go.mod 移除)."""
+    """删除主题. 支持传统主题 (themes/<name>) 和 module 主题 (从 go.mod 移除).
+
+    错误返回 (False, code) 用稳定的错误码, 前端映射到 i18n 文案.
+    """
     name = name.strip()
     if not name or name.startswith("."):
-        return False, "主题名无效"
+        return False, "err_invalid_name"
     # 不能删除当前使用中的主题
     if name == current_theme():
-        return False, "不能删除当前正在使用的主题"
+        return False, "err_in_use"
     # 预置主题禁止删除
     if name in PRESET_THEMES:
-        return False, "系统预置主题不能删除"
+        return False, "err_preset"
     # 路径穿越检查
     if ".." in name or "/" in name and not name.startswith("github.com/"):
-        return False, "非法主题名"
+        return False, "err_bad_name"
     is_module = name.startswith("github.com/") or ("/" in name)
     if is_module:
         # 从 go.mod 移除
         go_mod = BLOG_DIR / "go.mod"
         if not go_mod.exists():
-            return False, "无 go.mod"
+            return False, "err_no_gomod"
         try:
             lines = [l for l in go_mod.read_text(encoding="utf-8").splitlines()
                      if name not in l]
             go_mod.write_text("\n".join(lines) + "\n", encoding="utf-8")
             return True, None
         except OSError as e:
-            return False, str(e)
+            return False, "err_os"
     else:
         # 传统主题: 删除 themes/<name>
         target = THEMES_DIR / name
         if not target.is_dir():
-            return False, "主题不存在"
+            return False, "err_not_found"
         try:
             import shutil
             shutil.rmtree(target)
@@ -875,10 +882,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             self._send(200, json.dumps(get_service_status()))
         elif path == "/api/doc":
-            # API 使用指南 Markdown 文档
+            # API 使用指南 Markdown 文档 (支持 lang=zh/en)
             if not self._check_auth():
                 return
-            self._send(200, json.dumps({"doc": build_api_doc()}))
+            lang = self.path.split("lang=", 1)[1][:2] if "lang=" in self.path else "zh"
+            if lang not in ("zh", "en"):
+                lang = "zh"
+            self._send(200, json.dumps({"doc": build_api_doc(lang)}))
         elif path == "/api/proxy":
             if not self._check_auth():
                 return
@@ -1110,6 +1120,16 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang 
   .log-view{max-height:calc(100vh - 240px);font-size:11px;padding:10px}
 }
 /* 分页控件 */
+/* 文章列表表格 */
+#postsTable{width:100%;border-collapse:collapse;font-size:13px}
+#postsTable th,#postsTable td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}
+#postsTable th{color:var(--muted);font-weight:600;font-size:12px}
+#postsTable td.post-title{max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 移动端: 隐藏文件名列, 只留标题+日期 */
+@media (max-width:768px){
+  #postsTable td.post-file,#postsTable th:nth-child(3){display:none}
+  #postsTable th:nth-child(1){width:60%}
+}
 .pager{display:flex;align-items:center;gap:8px;margin-top:12px;justify-content:center}
 .pager button{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--card2);color:var(--text);cursor:pointer;font-size:12px}
 .pager button:disabled{opacity:.4;cursor:not-allowed}
@@ -1300,6 +1320,7 @@ const I18N = {
     rebuild_btn:'🔄 重建站点', rebuilding:'正在重建…', rebuild_done:'✓ 已重建', rebuild_fail:'重建失败:',
     token_btn:'🔑 创建 token', token_creating:'正在生成新 token…', token_done:'✓ 新 token (立即生效):', token_fail:'创建失败:',
     saving:'保存中…', saved:'✓ 已保存:', rendering:'(Hugo 自动渲染中)', save_fail:'保存失败', deleting:'删除中…', deleted:'✓ 已删除主题:', delete_fail:'删除失败', del_confirm:'确定删除主题「{name}」吗？',
+    err_invalid_name:'主题名无效', err_in_use:'不能删除当前正在使用的主题', err_preset:'系统预置主题不能删除', err_bad_name:'非法主题名', err_no_gomod:'无 go.mod', err_os:'删除失败（系统错误）', err_not_found:'主题不存在',
     switching:'切换中…', switched:'✓ 已切换到主题:', switch_fail:'切换失败', uploading:'上传中…', uploaded:'✓ 主题已上传:', upload_fail:'上传失败', pls_zip:'请选择 zip 文件', no_theme:'请输入 git 地址或 module 路径', installing:'安装中… (可能需要一些时间)', installed:'✓ 主题已安装:', deps:'依赖', install_fail:'安装失败', invalid_install:'无法识别：请输入 git 仓库地址 或 Hugo module 路径',
     proxy_saved:'✓ 代理设置已保存（重启应用生效）', proxy_save_fail:'保存失败', loading_log:'加载中…', load_log_fail:'加载日志失败:', log_read_fail:'读取失败', no_log:'无日志内容', no_log_data:'(暂无日志)', load_list_fail:'加载日志列表失败:', log_fmt:'{src} 日志 · {disp} · 共 {total} 行',
   },
@@ -1319,6 +1340,7 @@ const I18N = {
     rebuild_btn:'🔄 Rebuild', rebuilding:'Rebuilding…', rebuild_done:'✓ Rebuilt', rebuild_fail:'Rebuild failed:',
     token_btn:'🔑 Create Token', token_creating:'Generating new token…', token_done:'✓ New token (effective now):', token_fail:'Failed:',
     saving:'Saving…', saved:'✓ Saved:', rendering:'(Hugo re-rendering)', save_fail:'Save failed', deleting:'Deleting…', deleted:'✓ Deleted theme:', delete_fail:'Delete failed', del_confirm:'Delete theme "{name}"?',
+    err_invalid_name:'Invalid theme name', err_in_use:'Cannot delete the active theme', err_preset:'Preset themes cannot be deleted', err_bad_name:'Invalid theme name', err_no_gomod:'No go.mod', err_os:'Delete failed (system error)', err_not_found:'Theme not found',
     switching:'Switching…', switched:'✓ Switched to:', switch_fail:'Switch failed', uploading:'Uploading…', uploaded:'✓ Uploaded:', upload_fail:'Upload failed', pls_zip:'Select a zip file', no_theme:'Enter git URL or module path', installing:'Installing… (may take a while)', installed:'✓ Installed:', deps:'deps', install_fail:'Install failed', invalid_install:'Unrecognized: enter a git repo URL or a Hugo module path',
     proxy_saved:'✓ Proxy saved (takes effect after restart)', proxy_save_fail:'Save failed', loading_log:'Loading…', load_log_fail:'Failed to load log:', log_read_fail:'Read failed', no_log:'No log content', no_log_data:'(no log)', load_list_fail:'Failed to load log list:', log_fmt:'{src} log · {disp} · {total} lines',
   }
@@ -1382,7 +1404,7 @@ async function loadPosts(){
 // 文章列表分页
 let allPosts = [];
 let currentPage = 1;
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 function renderPosts(){
   const totalPages = Math.max(1, Math.ceil(allPosts.length / PAGE_SIZE));
   if(currentPage > totalPages) currentPage = totalPages;
@@ -1390,7 +1412,7 @@ function renderPosts(){
   const pagePosts = allPosts.slice(start, start + PAGE_SIZE);
   const tbody = document.querySelector('#postsTable tbody');
   tbody.innerHTML = pagePosts.map(p=>
-    `<tr><td>${escapeHtml(p.title)}</td><td>${p.date||'-'}</td><td>${p.filename}</td></tr>`
+    `<tr><td class="post-title">${escapeHtml(p.title)}</td><td class="post-date">${p.date||'-'}</td><td class="post-file">${p.filename}</td></tr>`
   ).join('') || '<tr><td colspan="3">'+t('no_posts')+'</td></tr>';
   const pager = document.getElementById('pager');
   if(allPosts.length > PAGE_SIZE){
@@ -1440,8 +1462,8 @@ async function loadStatus(){
     const d = await r.json();
     const dot = on => '<span class="stat-dot ' + (on?'dot-on':'dot-off') + '"></span>';
     const cards = [
-      {k:t('stat_hugo')+' · :13133', v:(d.hugo && d.hugo.running) && (d.ports && d.ports.blog) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
-      {k:t('stat_manager')+' · :13134', v:(d.manager && d.manager.running) && (d.ports && d.ports.admin) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_hugo')+' · 13133', v:(d.hugo && d.hugo.running) && (d.ports && d.ports.blog) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_manager')+' · 13134', v:(d.manager && d.manager.running) && (d.ports && d.ports.admin) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
       {k:t('stat_posts'), v:(d.posts||0)},
       {k:t('stat_themes'), v:(d.themes||0)},
       {k:t('stat_version'), v:(d.hugo_version||'').split(' ')[0]||'-'},
@@ -1527,7 +1549,7 @@ async function loadThemes(){
     if(th.module) tag = '<span class="tag tag-module">'+t('tag_module')+'</span>';
     else if(th.preset) tag = '<span class="tag tag-preset">'+t('tag_preset')+'</span>';
     else if(th.valid) tag = '<span class="tag tag-installed">'+t('tag_installed')+'</span>';
-    const status = active ? '<span class="theme-status status-active">'+t('in_use')+'</span>' : (th.valid ? '<span class="theme-status">'+t('available')+'</span>' : '<span class="theme-status status-invalid">'+t('invalid')+'</span>');
+    const status = active ? '<span class="theme-status status-active"></span>' : (th.valid ? '<span class="theme-status">'+t('available')+'</span>' : '<span class="theme-status status-invalid">'+t('invalid')+'</span>');
     let actions = '';
     if(!active && th.valid){
       actions += `<button class="btn secondary" onclick="switchTheme('${th.name}')">${t('use')}</button>`;
@@ -1553,7 +1575,9 @@ async function deleteTheme(name){
     msg.textContent = t('deleted') + ' ' + name;
     loadThemes();
   } else {
-    msg.textContent = '✗ ' + (d.error||t('delete_fail'));
+    const code = d.error || t('delete_fail');
+    // 错误码映射到 i18n (err_ 前缀)
+    msg.textContent = '✗ ' + (String(code).startsWith('err_') ? t(code) : code);
   }
 }
 async function switchTheme(name){
@@ -1682,7 +1706,7 @@ async function loadLogs(){
       view.textContent = t('no_log');
       return;
     }
-    info.textContent = t('log_fmt', {src: source.toUpperCase(), disp: d.display, total: d.total}) + (date ? '' : ' (' + t('refresh') + ' 2000)');
+    info.textContent = t('log_fmt', {src: source === 'manager' ? t('log_src_manager') : t('log_src_hugo'), disp: d.display, total: d.total}) + (date ? '' : ' (' + t('refresh') + ' 2000)');
     view.textContent = d.content || t('no_log_data');
     view.scrollTop = view.scrollHeight;
   }catch(e){
@@ -1734,11 +1758,9 @@ async function loadApiDoc(){
   const el = document.getElementById('apiDoc');
   if(!el) return;
   try{
-    if(!apiDocMd){
-      const r = await apiFetch('/api/doc');
-      const d = await r.json();
-      apiDocMd = d.doc || '';
-    }
+    const r = await apiFetch('/api/doc?lang=' + currentLang);
+    const d = await r.json();
+    apiDocMd = d.doc || '';
     el.innerHTML = renderMarkdown(apiDocMd);
   }catch(e){ el.textContent = t('load_log_fail') + ' ' + e; }
 }
