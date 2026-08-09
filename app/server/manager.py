@@ -255,6 +255,43 @@ def upload_theme(zip_data, filename):
         return False, str(e)
 
 
+def delete_theme(name):
+    """删除主题. 支持传统主题 (themes/<name>) 和 module 主题 (从 go.mod 移除)."""
+    name = name.strip()
+    if not name or name.startswith("."):
+        return False, "主题名无效"
+    # 不能删除当前使用中的主题
+    if name == current_theme():
+        return False, "不能删除当前正在使用的主题"
+    # 路径穿越检查
+    if ".." in name or "/" in name and not name.startswith("github.com/"):
+        return False, "非法主题名"
+    is_module = name.startswith("github.com/") or ("/" in name)
+    if is_module:
+        # 从 go.mod 移除
+        go_mod = BLOG_DIR / "go.mod"
+        if not go_mod.exists():
+            return False, "无 go.mod"
+        try:
+            lines = [l for l in go_mod.read_text(encoding="utf-8").splitlines()
+                     if name not in l]
+            go_mod.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            return True, None
+        except OSError as e:
+            return False, str(e)
+    else:
+        # 传统主题: 删除 themes/<name>
+        target = THEMES_DIR / name
+        if not target.is_dir():
+            return False, "主题不存在"
+        try:
+            import shutil
+            shutil.rmtree(target)
+            return True, None
+        except OSError as e:
+            return False, str(e)
+
+
 def install_module_theme(module_path):
     """从 Hugo Module 安装主题 (hugo mod get). module_path 如 github.com/bep/docuapi."""
     module_path = module_path.strip()
@@ -428,6 +465,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(200, json.dumps({"ok": True, "theme": result}))
                 else:
                     self._send(400, json.dumps({"error": result}))
+            except Exception as e:
+                self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/api/theme/delete":
+            # 删除主题
+            try:
+                data = self._read_json()
+                ok, err = delete_theme(data.get("theme", ""))
+                if ok:
+                    self._send(200, json.dumps({"ok": True}))
+                else:
+                    self._send(400, json.dumps({"error": err}))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
         elif path == "/api/proxy":
@@ -681,9 +729,25 @@ async function loadThemes(){
     return `<tr>
       <td>${escapeHtml(t.name)}</td>
       <td>${active ? '<span style="color:var(--accent)">✓ 使用中</span>' : (t.valid ? '可用' : '<span style="color:var(--brand)">无效</span>')}</td>
-      <td>${t.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${t.name}')">使用</button>` : ''}</td>
+      <td>${t.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${t.name}')">使用</button> <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${t.name}')">删除</button>` : ''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="3">暂无主题，请上传</td></tr>';
+}
+async function deleteTheme(name){
+  if(!confirm('确定删除主题「' + name + '」吗？')) return;
+  const msg = document.getElementById('themeMsg');
+  msg.textContent = '删除中…';
+  const r = await apiFetch('/api/theme/delete', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({theme: name})
+  });
+  const d = await r.json();
+  if(d.ok){
+    msg.textContent = '✓ 已删除主题: ' + name;
+    loadThemes();
+  } else {
+    msg.textContent = '✗ ' + (d.error||'删除失败');
+  }
 }
 async function switchTheme(name){
   const msg = document.getElementById('themeMsg');
