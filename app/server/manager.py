@@ -303,15 +303,29 @@ def list_themes():
                     "name": d.name,
                     "valid": is_theme,
                 })
-    # go.mod 里的 module 主题 (theme 配置含 / 的是 module 路径)
+    # go.mod 里的 module 依赖 (含 "/" 的才是 module 主题路径; 跳过 indirect 工具依赖)
     go_mod = BLOG_DIR / "go.mod"
     if go_mod.exists():
         for line in go_mod.read_text(encoding="utf-8").splitlines():
             line = line.strip()
-            if line.startswith("require") or line.startswith("\t"):
-                parts = line.replace("require", "").strip().split()
-                if parts:
-                    themes.append({"name": parts[0], "valid": True, "module": True})
+            # 跳过 "require (" 括号行 / ")" / 空行
+            if not line or line in ("require (", ")", "require"):
+                continue
+            # 跳过 // indirect 工具依赖 (非主题)
+            if "// indirect" in line:
+                continue
+            # 去掉行尾其它注释
+            if "//" in line:
+                line = line.split("//", 1)[0].strip()
+            if not line:
+                continue
+            parts = line.replace("require", "").strip().split()
+            if not parts:
+                continue
+            mod = parts[0]
+            # 真正的 module 主题路径需含 "/" 和 "."
+            if "/" in mod and "." in mod:
+                themes.append({"name": mod, "valid": True, "module": True})
     return themes
 
 
@@ -789,73 +803,85 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <div class="layout">
   <div class="sidebar" id="sidebar">
     <div class="brand">📝 Hugo Blog</div>
-    <div class="nav-item active" onclick="switchNav('write')">✍️ 写文章</div>
-    <div class="nav-item" onclick="switchNav('posts')">📄 文章列表</div>
-    <div class="nav-item" onclick="switchNav('theme')">🎨 主题</div>
-    <div class="nav-item" onclick="switchNav('console')">📜 控制台</div>
-    <div class="nav-item" onclick="switchNav('settings')">⚙️ 设置</div>
+    <div class="nav-item active" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
+    <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
+    <div class="nav-item" onclick="switchNav('theme')" data-i18n="nav_theme">🎨 主题</div>
+    <div class="nav-item" onclick="switchNav('settings')" data-i18n="nav_settings">⚙️ 设置</div>
   </div>
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
   <div class="main">
     <div class="topbar">
       <div style="display:flex;align-items:center;gap:8px">
         <button class="hamburger" onclick="toggleSidebar()">☰</button>
-        <h1>Hugo Blog 管理</h1>
+        <h1 data-i18n="app_title">Hugo Blog 管理</h1>
       </div>
-      <div style="display:flex;gap:8px">
-        <a class="btn secondary" href="javascript:void(0)" onclick="window.open('http://'+location.hostname+':13133/','_blank');return false" style="text-decoration:none">查看博客</a>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn secondary" id="langToggle" onclick="toggleLang()" style="width:auto;padding:6px 10px" title="中/EN">EN</button>
+        <button class="btn secondary" id="themeToggle" onclick="toggleTheme()" style="width:auto;padding:6px 10px" title="日夜主题">🌙</button>
+        <a class="btn secondary" href="javascript:void(0)" onclick="window.open('http://'+location.hostname+':13133/','_blank');return false" style="text-decoration:none" data-i18n="view_blog">查看博客</a>
       </div>
     </div>
     <div class="tab-panel active" id="tab-write">
       <div class="panel">
-        <h2>✍️ 新建文章</h2>
-        <label>标题 *</label><input id="title" placeholder="文章标题">
-        <label>标签 (逗号分隔)</label><input id="tags" placeholder="hugo, fnos">
-        <label>内容 (Markdown)</label><textarea id="content" placeholder="# 标题&#10;正文..."></textarea>
+        <h2 data-i18n="new_post_title">✍️ 新建文章</h2>
+        <label data-i18n="title_label">标题 *</label><input id="title" placeholder="文章标题">
+        <label data-i18n="tags_label">标签 (逗号分隔)</label><input id="tags" placeholder="hugo, fnos">
+        <label data-i18n="content_label">内容 (Markdown)</label><textarea id="content" placeholder="# 标题&#10;正文..."></textarea>
         <div class="msg" id="msg"></div>
-        <button class="btn" onclick="createPost()" style="margin-top:14px">保存并发布</button>
-        <div class="hint">保存后 Hugo 会自动重新渲染，稍等片刻刷新博客即可看到。</div>
+        <button class="btn" onclick="createPost()" style="margin-top:14px" data-i18n="save_publish">保存并发布</button>
+        <div class="hint" data-i18n="save_hint">保存后 Hugo 会自动重新渲染，稍等片刻刷新博客即可看到。</div>
       </div>
     </div>
     <div class="tab-panel" id="tab-posts">
       <div class="panel">
-        <h2>📄 文章列表</h2>
+        <h2 data-i18n="posts_title">📄 文章列表</h2>
         <table id="postsTable">
-          <thead><tr><th>标题</th><th>日期</th><th>文件名</th></tr></thead>
+          <thead><tr><th data-i18n="th_title">标题</th><th data-i18n="th_date">日期</th><th data-i18n="th_file">文件名</th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="pager" id="pager" style="display:none">
-          <button id="prevPage" onclick="changePage(-1)">‹ 上一页</button>
+          <button id="prevPage" onclick="changePage(-1)" data-i18n="prev_page">‹ 上一页</button>
           <span class="pager-info" id="pagerInfo"></span>
-          <button id="nextPage" onclick="changePage(1)">下一页 ›</button>
+          <button id="nextPage" onclick="changePage(1)" data-i18n="next_page">下一页 ›</button>
         </div>
       </div>
     </div>
     <div class="tab-panel" id="tab-theme">
       <div class="panel">
-        <h2>🎨 主题管理 <span id="curTheme" style="font-size:12px;color:var(--muted);font-weight:400"></span></h2>
+        <h2 data-i18n="theme_title">🎨 主题管理 <span id="curTheme" style="font-size:12px;color:var(--muted);font-weight:400"></span></h2>
         <table id="themesTable">
-          <thead><tr><th>主题</th><th>状态</th><th>操作</th></tr></thead>
+          <thead><tr><th data-i18n="th_theme">主题</th><th data-i18n="th_status">状态</th><th data-i18n="th_action">操作</th></tr></thead>
           <tbody></tbody>
         </table>
         <div class="msg" id="themeMsg"></div>
-        <label>上传主题 (zip 包)</label>
+        <label data-i18n="install_online_label">在线安装 (git 仓库 或 Hugo Module)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="installInput" placeholder="https://github.com/user/theme.git 或 github.com/bep/docuapi">
+          <button class="btn secondary" onclick="installTheme()" style="width:auto;white-space:nowrap" data-i18n="install_btn">安装</button>
+        </div>
+        <div class="hint" data-i18n="install_hint">git 地址自动克隆，module 路径自动下载；联网后自动检测依赖（module/sass）。</div>
+        <label data-i18n="upload_label">上传主题 zip 包 <span style="color:var(--muted);font-weight:400" data-i18n="upload_note">(用于无法使用 GitHub 的场景)</span></label>
         <input type="file" id="themeFile" accept=".zip">
-        <button class="btn" onclick="uploadTheme()" style="margin-top:10px">上传主题</button>
-        <label>从 Hugo Module 安装</label>
-        <input id="moduleInput" placeholder="github.com/bep/docuapi">
-        <button class="btn secondary" onclick="installModuleTheme()" style="margin-top:10px">下载并安装</button>
-        <label>从 git 仓库安装</label>
-        <input id="gitInput" placeholder="https://github.com/user/theme.git">
-        <button class="btn secondary" onclick="installGitTheme()" style="margin-top:10px">git 克隆安装</button>
-        <div class="hint">zip 上传 / git 克隆 / module 安装效果相同；git 安装后自动检测依赖（module/sass）。</div>
-        <div class="hint">用于 Hugo Module 依赖的主题（需联网下载）。module 安装后会在列表出现并可切换。</div>
-        <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
+        <button class="btn secondary" onclick="uploadTheme()" style="margin-top:10px" data-i18n="upload_btn">上传主题</button>
+        <div class="hint" data-i18n="upload_hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
       </div>
     </div>
-    <div class="tab-panel" id="tab-console">
+    <div class="tab-panel" id="tab-settings">
       <div class="panel">
-        <h2>📜 日志控制台</h2>
+        <h2 data-i18n="proxy_title">⚙️ 代理设置</h2>
+        <p class="hint" style="margin-bottom:10px" data-i18n="proxy_hint">用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。</p>
+        <label data-i18n="http_label">HTTP 代理</label>
+        <input id="proxyHttp" placeholder="http://192.168.31.31:7890">
+        <label data-i18n="https_label">HTTPS 代理</label>
+        <input id="proxyHttps" placeholder="http://192.168.31.31:7890">
+        <label data-i18n="noproxy_label">NO_PROXY</label>
+        <input id="proxyNo" value="localhost,127.0.0.1">
+        <div class="msg" id="proxyMsg"></div>
+        <button class="btn" onclick="saveProxy()" style="margin-top:14px" data-i18n="save_proxy">保存代理设置</button>
+        <div class="hint" data-i18n="proxy_restart_hint">保存后重启应用生效（下载 module 时使用）。</div>
+      </div>
+      <div class="panel">
+        <h2 data-i18n="console_title">📜 日志控制台</h2>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
           <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
             <option value="hugo">Hugo 日志</option>
@@ -864,33 +890,84 @@ th{color:var(--muted);font-weight:500;font-size:12px}
           <select id="logDate" onchange="loadLogs()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
             <option value="">当前</option>
           </select>
-          <button class="btn secondary" onclick="loadLogs()">🔄 刷新</button>
-          <button class="btn secondary" onclick="downloadLog()">⬇️ 下载</button>
+          <button class="btn secondary" onclick="loadLogs()" data-i18n="refresh">🔄 刷新</button>
+          <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
         </div>
         <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
-        <pre id="logView" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
-        <div class="hint" style="margin-top:8px">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
-      </div>
-    </div>
-    <div class="tab-panel" id="tab-settings">
-      <div class="panel">
-        <h2>⚙️ 代理设置</h2>
-        <p class="hint" style="margin-bottom:10px">用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。</p>
-        <label>HTTP 代理</label>
-        <input id="proxyHttp" placeholder="http://192.168.31.31:7890">
-        <label>HTTPS 代理</label>
-        <input id="proxyHttps" placeholder="http://192.168.31.31:7890">
-        <label>NO_PROXY</label>
-        <input id="proxyNo" value="localhost,127.0.0.1">
-        <div class="msg" id="proxyMsg"></div>
-        <button class="btn" onclick="saveProxy()" style="margin-top:14px">保存代理设置</button>
-        <div class="hint">保存后重启应用生效（下载 module 时使用）。</div>
+        <pre id="logView" style="background:#0b0e11;color:#d4d4d4;border:1px solid #222;border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
+        <div class="hint" style="margin-top:8px" data-i18n="console_hint">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
       </div>
     </div>
   </div>
 </div>
 <script>
 let apiToken = '';
+// ---------- i18n (中/EN) ----------
+const I18N = {
+  zh: {
+    app_title:'Hugo Blog 管理', nav_write:'✍️ 写文章', nav_posts:'📄 文章列表', nav_theme:'🎨 主题', nav_settings:'⚙️ 设置',
+    view_blog:'查看博客',
+    new_post_title:'✍️ 新建文章', title_label:'标题 *', tags_label:'标签 (逗号分隔)', content_label:'内容 (Markdown)', save_publish:'保存并发布', save_hint:'保存后 Hugo 会自动重新渲染，稍等片刻刷新博客即可看到。',
+    posts_title:'📄 文章列表', th_title:'标题', th_date:'日期', th_file:'文件名', prev_page:'‹ 上一页', next_page:'下一页 ›', no_posts:'暂无文章',
+    theme_title:'🎨 主题管理', th_theme:'主题', th_status:'状态', th_action:'操作', in_use:'✓ 使用中', available:'可用', invalid:'无效', use:'使用', delete:'删除', no_themes:'暂无主题，请上传',
+    install_online_label:'在线安装 (git 仓库 或 Hugo Module)', install_btn:'安装', install_hint:'git 地址自动克隆，module 路径自动下载；联网后自动检测依赖（module/sass）。',
+    upload_label:'上传主题 zip 包', upload_note:'(用于无法使用 GitHub 的场景)', upload_btn:'上传主题', upload_hint:'上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。',
+    proxy_title:'⚙️ 代理设置', proxy_hint:'用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。', http_label:'HTTP 代理', https_label:'HTTPS 代理', noproxy_label:'NO_PROXY', save_proxy:'保存代理设置', proxy_restart_hint:'保存后重启应用生效（下载 module 时使用）。',
+    console_title:'📜 日志控制台', refresh:'🔄 刷新', download:'⬇️ 下载', current:'当前', console_hint:'日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。',
+    saving:'保存中…', saved:'✓ 已保存:', rendering:'(Hugo 自动渲染中)', save_fail:'保存失败', deleting:'删除中…', deleted:'✓ 已删除主题:', delete_fail:'删除失败', del_confirm:'确定删除主题「{name}」吗？',
+    switching:'切换中…', switched:'✓ 已切换到主题:', switch_fail:'切换失败', uploading:'上传中…', uploaded:'✓ 主题已上传:', upload_fail:'上传失败', pls_zip:'请选择 zip 文件', no_theme:'请输入 git 地址或 module 路径', installing:'安装中… (可能需要一些时间)', installed:'✓ 主题已安装:', deps:'依赖', install_fail:'安装失败', invalid_install:'无法识别：请输入 git 仓库地址 或 Hugo module 路径',
+    proxy_saved:'✓ 代理设置已保存（重启应用生效）', proxy_save_fail:'保存失败', loading_log:'加载中…', load_log_fail:'加载日志失败:', log_read_fail:'读取失败', no_log:'无日志内容', no_log_data:'(暂无日志)', load_list_fail:'加载日志列表失败:', log_fmt:'{src} 日志 · {disp} · 共 {total} 行',
+  },
+  en: {
+    app_title:'Hugo Blog Admin', nav_write:'✍️ Write', nav_posts:'📄 Posts', nav_theme:'🎨 Themes', nav_settings:'⚙️ Settings',
+    view_blog:'View Blog',
+    new_post_title:'✍️ New Post', title_label:'Title *', tags_label:'Tags (comma separated)', content_label:'Content (Markdown)', save_publish:'Save & Publish', save_hint:'Hugo re-renders automatically; refresh the blog shortly to see changes.',
+    posts_title:'📄 Posts', th_title:'Title', th_date:'Date', th_file:'File', prev_page:'‹ Prev', next_page:'Next ›', no_posts:'No posts',
+    theme_title:'🎨 Themes', th_theme:'Theme', th_status:'Status', th_action:'Actions', in_use:'✓ In use', available:'Available', invalid:'Invalid', use:'Use', delete:'Delete', no_themes:'No themes, upload one',
+    install_online_label:'Install Online (git repo or Hugo Module)', install_btn:'Install', install_hint:'git URL clones, module path downloads; auto-detects deps (module/sass) when online.',
+    upload_label:'Upload theme zip', upload_note:'(for when GitHub is unavailable)', upload_btn:'Upload', upload_hint:'Zip must contain one theme dir (theme.toml or layouts).',
+    proxy_title:'⚙️ Proxy Settings', proxy_hint:'Proxy used when Hugo downloads module theme deps (docuapi etc). Leave empty for direct.', http_label:'HTTP proxy', https_label:'HTTPS proxy', noproxy_label:'NO_PROXY', save_proxy:'Save Proxy', proxy_restart_hint:'Takes effect after app restart (used when downloading modules).',
+    console_title:'📜 Log Console', refresh:'🔄 Refresh', download:'⬇️ Download', current:'Current', console_hint:'Logs are archived by date. Current file keeps today only; history moves to data/logs/.',
+    saving:'Saving…', saved:'✓ Saved:', rendering:'(Hugo re-rendering)', save_fail:'Save failed', deleting:'Deleting…', deleted:'✓ Deleted theme:', delete_fail:'Delete failed', del_confirm:'Delete theme "{name}"?',
+    switching:'Switching…', switched:'✓ Switched to:', switch_fail:'Switch failed', uploading:'Uploading…', uploaded:'✓ Uploaded:', upload_fail:'Upload failed', pls_zip:'Select a zip file', no_theme:'Enter git URL or module path', installing:'Installing… (may take a while)', installed:'✓ Installed:', deps:'deps', install_fail:'Install failed', invalid_install:'Unrecognized: enter a git repo URL or a Hugo module path',
+    proxy_saved:'✓ Proxy saved (takes effect after restart)', proxy_save_fail:'Save failed', loading_log:'Loading…', load_log_fail:'Failed to load log:', log_read_fail:'Read failed', no_log:'No log content', no_log_data:'(no log)', load_list_fail:'Failed to load log list:', log_fmt:'{src} log · {disp} · {total} lines',
+  }
+};
+let currentLang = localStorage.getItem('hugo_lang') || 'zh';
+let currentTheme = localStorage.getItem('hugo_theme') || 'light';
+function t(key, vars){
+  const dict = I18N[currentLang] || I18N.zh;
+  let s = dict[key] !== undefined ? dict[key] : (I18N.zh[key] || key);
+  if(vars) for(const k in vars) s = s.replace('{'+k+'}', vars[k]);
+  return s;
+}
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k = el.getAttribute('data-i18n');
+    if(k) el.innerHTML = t(k);
+  });
+  document.getElementById('langToggle').textContent = currentLang === 'zh' ? 'EN' : '中文';
+}
+function toggleLang(){
+  currentLang = currentLang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('hugo_lang', currentLang);
+  applyI18n();
+  // 重新渲染动态内容 (文章/主题列表的文案)
+  if(document.getElementById('tab-posts').classList.contains('active')) loadPosts();
+  if(document.getElementById('tab-theme').classList.contains('active')) loadThemes();
+  loadLogDates();
+}
+function toggleTheme(){
+  currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('hugo_theme', currentTheme);
+  document.body.setAttribute('data-theme', currentTheme);
+  document.getElementById('themeToggle').textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+}
+function initPrefs(){
+  document.body.setAttribute('data-theme', currentTheme);
+  document.getElementById('themeToggle').textContent = currentTheme === 'dark' ? '☀️' : '🌙';
+  applyI18n();
+}
 // 带 Bearer token 的 fetch (所有 API 请求)
 async function apiFetch(url, options={}){
   const headers = Object.assign({}, options.headers || {});
@@ -902,7 +979,7 @@ async function initToken(){
   try{
     const r = await fetch('/api/bootstrap');
     const d = await r.json();
-    if(d.api_token){ apiToken = d.api_token; loadPosts(); loadThemes(); }
+    if(d.api_token){ apiToken = d.api_token; initPrefs(); loadPosts(); loadThemes(); }
   }catch(e){}
 }
 async function loadPosts(){
@@ -923,7 +1000,7 @@ function renderPosts(){
   const tbody = document.querySelector('#postsTable tbody');
   tbody.innerHTML = pagePosts.map(p=>
     `<tr><td>${escapeHtml(p.title)}</td><td>${p.date||'-'}</td><td>${p.filename}</td></tr>`
-  ).join('') || '<tr><td colspan="3">暂无文章</td></tr>';
+  ).join('') || '<tr><td colspan="3">'+t('no_posts')+'</td></tr>';
   const pager = document.getElementById('pager');
   if(allPosts.length > PAGE_SIZE){
     pager.style.display = 'flex';
@@ -948,8 +1025,7 @@ function switchNav(tab){
   if(panel) panel.classList.add('active');
   if(tab === 'posts') loadPosts();
   if(tab === 'theme') loadThemes();
-  if(tab === 'settings') loadProxy();
-  if(tab === 'console') loadLogDates();
+  if(tab === 'settings'){ loadProxy(); loadLogDates(); }
   toggleSidebar(false); // 切导航后关闭移动端侧边栏
 }
 // 汉堡菜单 (移动端)
@@ -962,7 +1038,7 @@ function toggleSidebar(force){
 }
 async function createPost(){
   const msg = document.getElementById('msg');
-  msg.textContent = '保存中…';
+  msg.textContent = t('saving');
   const r = await apiFetch('/api/new', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
@@ -973,113 +1049,106 @@ async function createPost(){
   });
   const d = await r.json();
   if(d.ok){
-    msg.textContent = '✓ 已保存: ' + d.path + ' (Hugo 自动渲染中)';
+    msg.textContent = t('saved') + ' ' + d.path + ' ' + t('rendering');
     document.getElementById('title').value='';
     document.getElementById('tags').value='';
     document.getElementById('content').value='';
     loadPosts();
   } else {
-    msg.textContent = '✗ ' + (d.error||'保存失败');
+    msg.textContent = '✗ ' + (d.error||t('save_fail'));
   }
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function loadThemes(){
   const r = await apiFetch('/api/themes');
   const d = await r.json();
-  document.getElementById('curTheme').textContent = d.current ? '· 当前: ' + d.current : '';
+  document.getElementById('curTheme').textContent = d.current ? '· ' + t('th_theme').replace('主题','') + ': ' + d.current : '';
   const tbody = document.querySelector('#themesTable tbody');
   tbody.innerHTML = (d.themes||[]).map(t=>{
     const active = t.name === d.current;
     return `<tr>
       <td>${escapeHtml(t.name)}</td>
-      <td>${active ? '<span style="color:var(--accent)">✓ 使用中</span>' : (t.valid ? '可用' : '<span style="color:var(--brand)">无效</span>')}</td>
-      <td>${t.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${t.name}')">使用</button> <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${t.name}')">删除</button>` : ''}</td>
+      <td>${active ? '<span style="color:var(--accent)">'+t('in_use')+'</span>' : (t.valid ? t('available') : '<span style="color:var(--brand)">'+t('invalid')+'</span>')}</td>
+      <td>${t.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${t.name}')">${t('use')}</button> <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${t.name}')">${t('delete')}</button>` : ''}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="3">暂无主题，请上传</td></tr>';
+  }).join('') || '<tr><td colspan="3">'+t('no_themes')+'</td></tr>';
 }
 async function deleteTheme(name){
-  if(!confirm('确定删除主题「' + name + '」吗？')) return;
+  if(!confirm(t('del_confirm', {name}))) return;
   const msg = document.getElementById('themeMsg');
-  msg.textContent = '删除中…';
+  msg.textContent = t('deleting');
   const r = await apiFetch('/api/theme/delete', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({theme: name})
   });
   const d = await r.json();
   if(d.ok){
-    msg.textContent = '✓ 已删除主题: ' + name;
+    msg.textContent = t('deleted') + ' ' + name;
     loadThemes();
   } else {
-    msg.textContent = '✗ ' + (d.error||'删除失败');
+    msg.textContent = '✗ ' + (d.error||t('delete_fail'));
   }
 }
 async function switchTheme(name){
   const msg = document.getElementById('themeMsg');
-  msg.textContent = '切换中…';
+  msg.textContent = t('switching');
   const r = await apiFetch('/api/theme/switch', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({theme: name})
   });
   const d = await r.json();
   if(d.ok){
-    msg.textContent = '✓ 已切换到主题: ' + name + ' (Hugo 自动重新渲染)';
+    msg.textContent = t('switched') + ' ' + name;
     loadThemes();
   } else {
-    msg.textContent = '✗ ' + (d.error||'切换失败');
+    msg.textContent = '✗ ' + (d.error||t('switch_fail'));
   }
 }
 async function uploadTheme(){
   const msg = document.getElementById('themeMsg');
   const file = document.getElementById('themeFile').files[0];
-  if(!file){ msg.textContent = '请选择 zip 文件'; return; }
-  msg.textContent = '上传中…';
+  if(!file){ msg.textContent = t('pls_zip'); return; }
+  msg.textContent = t('uploading');
   const fd = new FormData();
   fd.append('file', file);
   const r = await apiFetch('/api/theme/upload', {method:'POST', body: fd});
   const d = await r.json();
   if(d.ok){
-    msg.textContent = '✓ 主题已上传: ' + d.theme + '，可在上方列表切换到该主题';
+    msg.textContent = t('uploaded') + ' ' + d.theme;
     document.getElementById('themeFile').value='';
     loadThemes();
   } else {
-    msg.textContent = '✗ ' + (d.error||'上传失败');
+    msg.textContent = '✗ ' + (d.error||t('upload_fail'));
   }
 }
-async function installModuleTheme(){
+// 合并安装: 自动识别 git URL 或 Hugo module 路径
+async function installTheme(){
   const msg = document.getElementById('themeMsg');
-  const mod = document.getElementById('moduleInput').value.trim();
-  if(!mod){ msg.textContent = '请输入 module 路径'; return; }
-  msg.textContent = '下载中… (可能需要一些时间)';
-  const r = await apiFetch('/api/theme/module', {
+  const val = document.getElementById('installInput').value.trim();
+  if(!val){ msg.textContent = t('no_theme'); return; }
+  const isGit = /^(https?:\/\/|git@|ssh:\/\/)/.test(val);
+  msg.textContent = t('installing');
+  let url = '/api/theme/' + (isGit ? 'git' : 'module');
+  let body = isGit ? {url: val} : {module: val};
+  if(!isGit && !val.includes('/')){ msg.textContent = t('invalid_install'); return; }
+  const r = await apiFetch(url, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({module: mod})
+    body: JSON.stringify(body)
   });
   const d = await r.json();
   if(d.ok){
-    msg.textContent = '✓ module 主题已安装并启用: ' + d.theme;
-    document.getElementById('moduleInput').value='';
+    let detail = '';
+    if(isGit){
+      const deps = (d.theme.deps||[]).join(', ') || 'none';
+      detail = d.theme.name + ' (' + t('deps') + ': ' + deps + ')';
+    } else {
+      detail = d.theme;
+    }
+    msg.textContent = t('installed') + ' ' + detail;
+    document.getElementById('installInput').value='';
     loadThemes();
   } else {
-    msg.textContent = '✗ ' + (d.error||'安装失败');
-  }
-}
-async function installGitTheme(){
-  const msg = document.getElementById('themeMsg');
-  const url = document.getElementById('gitInput').value.trim();
-  if(!url){ msg.textContent = '请输入 git 地址'; return; }
-  msg.textContent = 'git 克隆中… (可能需要一些时间)';
-  const r = await apiFetch('/api/theme/git', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({url: url})
-  });
-  const d = await r.json();
-  if(d.ok){
-    const deps = (d.theme.deps||[]).join(', ') || '无';
-    msg.textContent = '✓ 主题已安装: ' + d.theme.name + '（依赖: ' + deps + '）';
-    document.getElementById('gitInput').value='';
-    loadThemes();
-  } else {
-    msg.textContent = '✗ ' + (d.error||'安装失败');
+    msg.textContent = '✗ ' + (d.error||t('install_fail'));
   }
 }
 async function loadProxy(){
@@ -1091,7 +1160,7 @@ async function loadProxy(){
 }
 async function saveProxy(){
   const msg = document.getElementById('proxyMsg');
-  msg.textContent = '保存中…';
+  msg.textContent = t('saving');
   const r = await apiFetch('/api/proxy', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
@@ -1102,9 +1171,9 @@ async function saveProxy(){
   });
   const d = await r.json();
   if(d.ok){
-    msg.textContent = '✓ 代理设置已保存（重启应用生效）';
+    msg.textContent = t('proxy_saved');
   } else {
-    msg.textContent = '✗ ' + (d.error||'保存失败');
+    msg.textContent = '✗ ' + (d.error||t('proxy_save_fail'));
   }
 }
 // ---------- 日志控制台 ----------
@@ -1127,28 +1196,28 @@ async function loadLogDates(){
       dateSel.value = prev;
     }
     loadLogs();
-  }catch(e){ document.getElementById('logView').textContent = '加载日志列表失败: ' + e; }
+  }catch(e){ document.getElementById('logView').textContent = t('load_list_fail') + ' ' + e; }
 }
 async function loadLogs(){
   const source = document.getElementById('logSource').value || 'hugo';
   const date = document.getElementById('logDate').value || '';
   const view = document.getElementById('logView');
   const info = document.getElementById('logInfo');
-  view.textContent = '加载中…';
+  view.textContent = t('loading_log');
   try{
     const q = 'source=' + encodeURIComponent(source) + '&tail=2000' + (date ? '&date=' + encodeURIComponent(date) : '');
     const r = await apiFetch('/api/logs?' + q);
     const d = await r.json();
     if(d.content === undefined){
-      info.textContent = '读取失败';
-      view.textContent = '无日志内容';
+      info.textContent = t('log_read_fail');
+      view.textContent = t('no_log');
       return;
     }
-    info.textContent = `${source.toUpperCase()} 日志 · ${d.display} · 共 ${d.total} 行${date?'':' (显示最近 2000 行)'}`;
-    view.textContent = d.content || '(暂无日志)';
+    info.textContent = t('log_fmt', {src: source.toUpperCase(), disp: d.display, total: d.total}) + (date ? '' : ' (' + t('refresh') + ' 2000)');
+    view.textContent = d.content || t('no_log_data');
     view.scrollTop = view.scrollHeight;
   }catch(e){
-    view.textContent = '加载日志失败: ' + e;
+    view.textContent = t('load_log_fail') + ' ' + e;
   }
 }
 function downloadLog(){
