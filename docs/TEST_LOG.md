@@ -4,6 +4,23 @@
 
 ---
 
+## 0.1.3.10 (2026-08-09)
+
+### 更新点
+- **强化主题导入**：
+  - 新增「从 git 仓库安装」(`POST /api/theme/git`) — git clone 到 themes/，无需转存 zip
+  - **自动检测依赖** (`detect_theme_deps`)：检测 go.mod 是否有 module require、assets 是否有 SCSS，安装后提示
+  - zip 上传 / git 克隆 / module 安装三合一
+
+### 问题点（已解决）
+- **历史文章格式** — 检查全部 35 篇：无 draft、无 date 异常、categories/tags 均为数组格式（之前已修复 categories）
+
+### 验证状态
+- [x] git 安装真实 GitHub 主题（LoveIt）成功
+- [x] 依赖检测（检测到 LoveIt sass 依赖）
+
+---
+
 ## 0.1.3.9 (2026-08-09)
 
 ### 更新点

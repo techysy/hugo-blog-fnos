@@ -292,6 +292,60 @@ def delete_theme(name):
             return False, str(e)
 
 
+def install_git_theme(git_url):
+    """从 git 仓库安装主题 (git clone 到 themes/). 自动检测依赖."""
+    git_url = git_url.strip()
+    if not git_url:
+        return False, "git 路径为空"
+    if not (git_url.startswith("http://") or git_url.startswith("https://") or git_url.startswith("git@")):
+        return False, "仅支持 http/https/git@ 开头的 git 地址"
+    import subprocess
+    # 主题名: 从 URL 推断 (仓库名, 去掉 .git)
+    name = git_url.rstrip("/").split("/")[-1]
+    if name.endswith(".git"):
+        name = name[:-4]
+    name = re.sub(r"[^a-zA-Z0-9_-]", "-", name)
+    if not name:
+        return False, "无法从 URL 推断主题名"
+    target = THEMES_DIR / name
+    try:
+        THEMES_DIR.mkdir(parents=True, exist_ok=True)
+        # 用 git clone (走代理配置)
+        env = dict(os.environ)
+        r = subprocess.run(
+            ["git", "clone", "--depth", "1", git_url, str(target)],
+            capture_output=True, text=True, env=env, timeout=120,
+        )
+        if r.returncode != 0:
+            return False, r.stderr.strip()[-300:] or "git clone 失败"
+        # 检测依赖
+        deps = detect_theme_deps(name)
+        return True, {"name": name, "deps": deps}
+    except subprocess.TimeoutExpired:
+        return False, "git clone 超时"
+    except Exception as e:
+        return False, str(e)
+
+
+def detect_theme_deps(name):
+    """检测主题依赖. 返回 ['module', 'sass'] 或 []"""
+    t = THEMES_DIR / name
+    deps = []
+    # 1. module 依赖: go.mod 有 require (非空)
+    go_mod = t / "go.mod"
+    if go_mod.exists():
+        txt = go_mod.read_text(encoding="utf-8")
+        if "require" in txt and re.search(r"require\s*\(", txt):
+            deps.append("module")
+    # 2. Dart Sass: assets 里有 .scss
+    assets = t / "assets"
+    if assets.exists():
+        scss = list(assets.rglob("*.scss")) + list(assets.rglob("*.sass"))
+        if scss:
+            deps.append("sass")
+    return deps
+
+
 def install_module_theme(module_path):
     """从 Hugo Module 安装主题 (hugo mod get). module_path 如 github.com/bep/docuapi."""
     module_path = module_path.strip()
@@ -467,6 +521,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(400, json.dumps({"error": result}))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/api/theme/git":
+            # 从 git 仓库安装主题 (git clone + 依赖检测)
+            try:
+                data = self._read_json()
+                ok, result = install_git_theme(data.get("url", ""))
+                if ok:
+                    self._send(200, json.dumps({"ok": True, "theme": result}))
+                else:
+                    self._send(400, json.dumps({"error": result}))
+            except Exception as e:
+                self._send(500, json.dumps({"error": str(e)}))
         elif path == "/api/theme/delete":
             # 删除主题
             try:
@@ -605,6 +670,10 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <label>从 Hugo Module 安装</label>
         <input id="moduleInput" placeholder="github.com/bep/docuapi">
         <button class="btn secondary" onclick="installModuleTheme()" style="margin-top:10px">下载并安装</button>
+        <label>从 git 仓库安装</label>
+        <input id="gitInput" placeholder="https://github.com/user/theme.git">
+        <button class="btn secondary" onclick="installGitTheme()" style="margin-top:10px">git 克隆安装</button>
+        <div class="hint">zip 上传 / git 克隆 / module 安装效果相同；git 安装后自动检测依赖（module/sass）。</div>
         <div class="hint">用于 Hugo Module 依赖的主题（需联网下载）。module 安装后会在列表出现并可切换。</div>
         <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
       </div>
@@ -794,6 +863,25 @@ async function installModuleTheme(){
   if(d.ok){
     msg.textContent = '✓ module 主题已安装并启用: ' + d.theme;
     document.getElementById('moduleInput').value='';
+    loadThemes();
+  } else {
+    msg.textContent = '✗ ' + (d.error||'安装失败');
+  }
+}
+async function installGitTheme(){
+  const msg = document.getElementById('themeMsg');
+  const url = document.getElementById('gitInput').value.trim();
+  if(!url){ msg.textContent = '请输入 git 地址'; return; }
+  msg.textContent = 'git 克隆中… (可能需要一些时间)';
+  const r = await apiFetch('/api/theme/git', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url: url})
+  });
+  const d = await r.json();
+  if(d.ok){
+    const deps = (d.theme.deps||[]).join(', ') || '无';
+    msg.textContent = '✓ 主题已安装: ' + d.theme.name + '（依赖: ' + deps + '）';
+    document.getElementById('gitInput').value='';
     loadThemes();
   } else {
     msg.textContent = '✗ ' + (d.error||'安装失败');
