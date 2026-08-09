@@ -25,7 +25,7 @@ from pathlib import Path
 BLOG_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/vol4/@appdata/hugo-blog/blog")
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 13134
 # 应用版本 (与 manifest 保持一致, 用于品牌区/仪表板显示)
-APP_VERSION = "0.1.4.9"
+APP_VERSION = "0.1.4.10"
 CONTENT_DIR = BLOG_DIR / "content"
 POST_DIR = CONTENT_DIR / "post"
 THEMES_DIR = BLOG_DIR / "themes"
@@ -1157,7 +1157,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <body data-theme="light">
 <div class="layout">
   <div class="sidebar" id="sidebar">
-    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.9</div></div>
+    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.10</div></div>
     <div class="nav-item active" onclick="switchNav('dash')" data-i18n="nav_dash">📊 仪表板</div>
     <div class="nav-item" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
