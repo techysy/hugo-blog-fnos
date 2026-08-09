@@ -4,6 +4,21 @@
 
 ---
 
+## 0.1.3.4 (2026-08-09)
+
+### 更新点
+- **暴露 API 给 agent + 认证** — manager.py 增加 API token 认证：
+  - `GET /api/bootstrap` 免认证，返回 `api_token`
+  - 其余 `/api/*`（posts/themes/info/new/theme_switch/theme_upload）需 `Authorization: Bearer <token>`
+  - token 存数据目录 `api_token`（权限 600）
+  - 前端管理面板自动携带 token
+- **文档化 API** — README 增加 agent 用法示例
+
+### 问题点（已解决）
+- （无新增问题；API 认证本地验证通过）
+
+---
+
 ## 0.1.3.3 (2026-08-09)
 
 ### 更新点

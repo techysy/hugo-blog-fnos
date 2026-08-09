@@ -69,6 +69,35 @@ Open the admin panel (`http://<NAS-IP>:13134`), in the "Theme manager":
 
 You can also drop a theme into `/vol4/@appshare/hugo-blog/blog/themes/<name>/` and set `theme = "<name>"` in `config/_default/config.toml`.
 
+### 🤖 Agent API (query/create posts)
+
+The admin panel port `13134` exposes a REST API so local agents can query and create posts with a token:
+
+```bash
+# 1. Get API token (no auth)
+TOKEN=$(curl -s http://<NAS-IP>:13134/api/bootstrap | jq -r '.api_token')
+
+# 2. List posts
+curl -s -H "Authorization: Bearer $TOKEN" http://<NAS-IP>:13134/api/posts | jq '.posts'
+
+# 3. Blog info
+curl -s -H "Authorization: Bearer $TOKEN" http://<NAS-IP>:13134/api/info | jq '.posts,.themes'
+
+# 4. Create a post
+curl -s -X POST http://<NAS-IP>:13134/api/new \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title":"New post","tags":"hugo,fnos","content":"# Body\ncontent..."}'
+
+# 5. Themes / switch
+curl -s -H "Authorization: Bearer $TOKEN" http://<NAS-IP>:13134/api/themes | jq '.current'
+curl -s -X POST http://<NAS-IP>:13134/api/theme/switch \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"theme":"minimal"}'
+```
+
+> 🔐 **Auth**: except `/api/bootstrap`, all `/api/*` require `Authorization: Bearer <token>`. Missing token returns **401**. Token is stored at `/vol4/@appshare/hugo-blog/api_token` (mode 600); delete it and restart to regenerate.
+> 💡 After a post is created, Hugo auto re-renders; refresh the blog (13133) to see it.
+
 ## 🐛 Troubleshooting
 
 See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).

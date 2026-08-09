@@ -13,6 +13,7 @@ import re
 import sys
 import json
 import time
+import secrets
 import zipfile
 import shutil
 import http.server
@@ -28,6 +29,29 @@ POST_DIR = CONTENT_DIR / "post"
 THEMES_DIR = BLOG_DIR / "themes"
 CONFIG_DIR = BLOG_DIR / "config" / "_default"
 CONFIG_FILE = CONFIG_DIR / "config.toml"
+DATA_DIR = BLOG_DIR.parent  # 数据目录 (@appshare/hugo-blog)
+TOKEN_FILE = DATA_DIR / "api_token"
+
+
+def get_or_create_token():
+    """读取或生成 API token (存在数据目录 api_token 文件, 权限 600)"""
+    try:
+        if TOKEN_FILE.exists():
+            tok = TOKEN_FILE.read_text(encoding="utf-8").strip()
+            if tok:
+                return tok
+        tok = secrets.token_hex(16)
+        TOKEN_FILE.write_text(tok, encoding="utf-8")
+        try:
+            os.chmod(TOKEN_FILE, 0o600)
+        except OSError:
+            pass
+        return tok
+    except OSError:
+        return ""
+
+
+API_TOKEN = get_or_create_token()
 
 # 生成安全的 slug (文件名)
 def slugify(title):
@@ -204,6 +228,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return {}
         return json.loads(self.rfile.read(length).decode("utf-8"))
 
+    def _check_auth(self):
+        """校验 Authorization: Bearer <token>. 返回 True 通过, False 已发送 401."""
+        if not API_TOKEN:
+            self._send(500, json.dumps({"error": "token 未初始化"}))
+            return False
+        auth = self.headers.get("Authorization", "")
+        if auth == "Bearer " + API_TOKEN:
+            return True
+        self._send(401, json.dumps({"error": "unauthorized"}))
+        return False
+
     def log_message(self, format, *args):
         sys.stderr.write(f"[{datetime.now().strftime('%H:%M:%S')}] {self.address_string()} {format % args}\n")
 
@@ -211,23 +246,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == "/":
             self._send(200, INDEX_HTML, "text/html; charset=utf-8")
+        elif path == "/api/bootstrap":
+            # 免认证: 返回 API token (供 agent / 前端获取)
+            self._send(200, json.dumps({
+                "api_token": API_TOKEN,
+                "blog_dir": str(BLOG_DIR),
+            }))
         elif path == "/api/posts":
+            if not self._check_auth():
+                return
             self._send(200, json.dumps({"posts": list_posts()}))
         elif path == "/api/themes":
+            if not self._check_auth():
+                return
             self._send(200, json.dumps({
                 "themes": list_themes(),
                 "current": current_theme(),
             }))
         elif path == "/api/info":
+            if not self._check_auth():
+                return
             self._send(200, json.dumps({
                 "blog_dir": str(BLOG_DIR),
                 "posts": len(list_posts()),
+                "themes": len(list_themes()),
+                "current_theme": current_theme(),
             }))
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
+        if not self._check_auth():
+            return
         if path == "/api/new":
             try:
                 data = self._read_json()
@@ -369,8 +420,23 @@ th{color:var(--muted);font-weight:500;font-size:12px}
   </div>
 </div>
 <script>
+let apiToken = '';
+// 带 Bearer token 的 fetch (所有 API 请求)
+async function apiFetch(url, options={}){
+  const headers = Object.assign({}, options.headers || {});
+  if(apiToken) headers['Authorization'] = 'Bearer ' + apiToken;
+  return fetch(url, Object.assign({}, options, {headers}));
+}
+// 初始化: 从 /api/bootstrap 获取 token
+async function initToken(){
+  try{
+    const r = await fetch('/api/bootstrap');
+    const d = await r.json();
+    if(d.api_token){ apiToken = d.api_token; loadPosts(); loadThemes(); }
+  }catch(e){}
+}
 async function loadPosts(){
-  const r = await fetch('/api/posts');
+  const r = await apiFetch('/api/posts');
   const d = await r.json();
   const tbody = document.querySelector('#postsTable tbody');
   tbody.innerHTML = (d.posts||[]).map(p=>
@@ -380,7 +446,7 @@ async function loadPosts(){
 async function createPost(){
   const msg = document.getElementById('msg');
   msg.textContent = '保存中…';
-  const r = await fetch('/api/new', {
+  const r = await apiFetch('/api/new', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({
       title: document.getElementById('title').value,
@@ -401,7 +467,7 @@ async function createPost(){
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function loadThemes(){
-  const r = await fetch('/api/themes');
+  const r = await apiFetch('/api/themes');
   const d = await r.json();
   document.getElementById('curTheme').textContent = d.current ? '· 当前: ' + d.current : '';
   const tbody = document.querySelector('#themesTable tbody');
@@ -417,7 +483,7 @@ async function loadThemes(){
 async function switchTheme(name){
   const msg = document.getElementById('themeMsg');
   msg.textContent = '切换中…';
-  const r = await fetch('/api/theme/switch', {
+  const r = await apiFetch('/api/theme/switch', {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({theme: name})
   });
@@ -436,7 +502,7 @@ async function uploadTheme(){
   msg.textContent = '上传中…';
   const fd = new FormData();
   fd.append('file', file);
-  const r = await fetch('/api/theme/upload', {method:'POST', body: fd});
+  const r = await apiFetch('/api/theme/upload', {method:'POST', body: fd});
   const d = await r.json();
   if(d.ok){
     msg.textContent = '✓ 主题已上传: ' + d.theme + '，可在上方列表切换到该主题';
@@ -446,8 +512,7 @@ async function uploadTheme(){
     msg.textContent = '✗ ' + (d.error||'上传失败');
   }
 }
-loadPosts();
-loadThemes();
+initToken();
 </script>
 </body>
 </html>

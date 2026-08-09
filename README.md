@@ -69,6 +69,35 @@ tags: [hugo, fnos]
 
 也可直接在数据目录放主题：把主题放到 `/vol4/@appshare/hugo-blog/blog/themes/<name>/`，并在 `config/_default/config.toml` 改 `theme = "<name>"`。
 
+### 🤖 Agent API（查询/创建文章）
+
+管理面板端口 `13134` 提供 REST API，本地 agent 可用 token 查询和创建文章：
+
+```bash
+# 1. 获取 API token（免认证）
+TOKEN=$(curl -s http://<NAS-IP>:13134/api/bootstrap | jq -r '.api_token')
+
+# 2. 查询文章列表
+curl -s -H "Authorization: Bearer $TOKEN" http://<NAS-IP>:13134/api/posts | jq '.posts'
+
+# 3. 查询博客信息
+curl -s -H "Authorization: Bearer $TOKEN" http://<NAS-IP>:13134/api/info | jq '.posts,.themes'
+
+# 4. 创建文章
+curl -s -X POST http://<NAS-IP>:13134/api/new \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title":"新文章","tags":"hugo,fnos","content":"# 正文\n内容..."}'
+
+# 5. 主题列表 / 切换
+curl -s -H "Authorization: Bearer $TOKEN" http://<NAS-IP>:13134/api/themes | jq '.current'
+curl -s -X POST http://<NAS-IP>:13134/api/theme/switch \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"theme":"minimal"}'
+```
+
+> 🔐 **认证**：除 `/api/bootstrap` 外，所有 `/api/*` 需 `Authorization: Bearer <token>`。未带 token 返回 **401**。token 存于 `/vol4/@appshare/hugo-blog/api_token`（权限 600），删除该文件后重启应用会重新生成。
+> 💡 agent 创建文章后，Hugo 自动重新渲染，刷新博客（13133）即可看到。
+
 ## 🐛 问题排查
 
 见 [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)。
