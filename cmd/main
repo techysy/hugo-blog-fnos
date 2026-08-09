@@ -3,7 +3,10 @@ set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-hugo-blog}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
-DATA_DIR="${TRIM_PKGVAR:-/vol4/@appshare/${APP_NAME}}"
+# 强制使用 @appshare（应用共享目录，文件管理可见）。
+# 注意: fnOS 会注入 TRIM_PKGVAR=/vol4/@appdata/<app>，若用 ${TRIM_PKGVAR:-...}
+# 会被覆盖为 @appdata。这里忽略 TRIM_PKGVAR，固定用 @appshare。
+DATA_DIR="/vol4/@appshare/${APP_NAME}"
 PORT="${TRIM_SERVICE_PORT:-13133}"
 MGMT_PORT=13134
 LOG="${DATA_DIR}/hugo.log"

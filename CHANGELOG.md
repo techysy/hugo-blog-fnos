@@ -2,6 +2,14 @@
 
 ---
 
+## v0.1.3 (2026-08-09)
+
+### 修复 / Fixes
+
+- **强制使用 `@appshare` 数据目录** — fnOS 会注入 `TRIM_PKGVAR=/vol4/@appdata/<app>`，旧 cmd/main 用 `${TRIM_PKGVAR:-@appshare}` 被覆盖为 @appdata，导致博客源实际在 @appdata 而非 @appshare。现 cmd/main **忽略 TRIM_PKGVAR，固定用 `/vol4/@appshare/<app>`**，确保博客源统一在应用共享目录。
+
+---
+
 ## v0.1.2 (2026-08-09)
 
 ### 新增 / Added
