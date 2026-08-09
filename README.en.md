@@ -20,7 +20,7 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 - 🚀 **Zero-dependency** — single Hugo binary, no Node/Python runtime needed
 - 🗄️ **Persistent data** — blog source at `/vol4/@appshare/hugo-blog/`, writable and backup-able
 - 🔄 **App Center managed** — start/stop, auto-start on boot, status
-- 🌐 **One-click access** — desktop icon opens the admin panel
+- 🌐 **One-click access** — desktop icon opens the blog
 
 ## 🚀 Quick Install
 
@@ -30,9 +30,9 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 
 ## 📖 Usage
 
-### Write a post (recommended: admin panel)
+### Write a post (admin panel)
 
-Open the desktop **Hugo Blog** icon (admin panel, port `13134`), fill in title/tags/content in the "Write post" form, click "Save & Publish". Hugo re-renders automatically; refresh the blog to see it.
+The desktop icon opens the **blog** (port `13133`). To write posts, manually visit the **admin panel** at `http://<NAS-IP>:13134`, fill in title/tags/content in the "Write post" form, click "Save & Publish". Hugo re-renders automatically; refresh the blog to see it.
 
 You can also drop a markdown file into `content/post/`:
 
@@ -50,8 +50,8 @@ Body here.
 
 | Service | Port | Purpose |
 |---|---|---|
-| Admin panel | `13134` | Write/list posts (desktop entry) |
-| Blog | `13133` | Site preview |
+| Blog | `13133` | Site preview (desktop entry) |
+| Admin panel | `13134` | Write/list posts (manual access) |
 
 ### Data directory
 
