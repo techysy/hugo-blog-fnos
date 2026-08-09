@@ -476,6 +476,9 @@ def delete_theme(name):
     # 不能删除当前使用中的主题
     if name == current_theme():
         return False, "不能删除当前正在使用的主题"
+    # 预置主题禁止删除
+    if name in PRESET_THEMES:
+        return False, "系统预置主题不能删除"
     # 路径穿越检查
     if ".." in name or "/" in name and not name.startswith("github.com/"):
         return False, "非法主题名"
@@ -891,9 +894,9 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <div class="layout">
   <div class="sidebar" id="sidebar">
     <div class="brand">📝 Hugo Blog</div>
-    <div class="nav-item active" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
+    <div class="nav-item active" onclick="switchNav('dash')" data-i18n="nav_dash">📊 仪表板</div>
+    <div class="nav-item" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
-    <div class="nav-item" onclick="switchNav('theme')" data-i18n="nav_theme">🎨 主题</div>
     <div class="nav-item" onclick="switchNav('settings')" data-i18n="nav_settings">⚙️ 设置</div>
   </div>
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
@@ -908,7 +911,30 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <a class="btn secondary" href="javascript:void(0)" onclick="window.open('http://'+location.hostname+':13133/','_blank');return false" style="text-decoration:none" data-i18n="view_blog">查看博客</a>
       </div>
     </div>
-    <div class="tab-panel active" id="tab-write">
+    <div class="tab-panel active" id="tab-dash">
+      <div class="panel">
+        <h2 data-i18n="dash_title">📊 服务状态</h2>
+        <div class="stat-grid" id="statGrid"></div>
+      </div>
+      <div class="panel">
+        <h2 data-i18n="console_title">📜 日志控制台</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
+            <option value="hugo">Hugo 日志</option>
+            <option value="manager">管理面板日志</option>
+          </select>
+          <select id="logDate" onchange="loadLogs()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
+            <option value="">当前</option>
+          </select>
+          <button class="btn secondary" onclick="loadLogs()" data-i18n="refresh">🔄 刷新</button>
+          <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
+        </div>
+        <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
+        <pre id="logView" style="background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
+        <div class="hint" style="margin-top:8px" data-i18n="console_hint">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-write">
       <div class="panel">
         <h2 data-i18n="new_post_title">✍️ 新建文章</h2>
         <label data-i18n="title_label">标题 *</label><input id="title" placeholder="文章标题">
@@ -933,53 +959,31 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         </div>
       </div>
     </div>
-    <div class="tab-panel" id="tab-theme">
-      <div class="panel">
-        <h2 data-i18n="theme_title">🎨 主题管理</h2>
-        <div class="hint" id="curTheme" style="margin-bottom:8px"></div>
-        <table id="themesTable">
-          <thead><tr><th data-i18n="th_theme">主题</th><th data-i18n="th_status">状态</th><th data-i18n="th_action">操作</th></tr></thead>
-          <tbody></tbody>
-        </table>
-        <div class="msg" id="themeMsg"></div>
-        <label data-i18n="install_online_label">在线安装 (git 仓库 或 Hugo Module)</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input id="installInput" placeholder="https://github.com/user/theme.git 或 github.com/bep/docuapi">
-          <button class="btn secondary" onclick="installTheme()" style="width:auto;white-space:nowrap" data-i18n="install_btn">安装</button>
-        </div>
-        <div class="hint" data-i18n="install_hint">git 地址自动克隆，module 路径自动下载；联网后自动检测依赖（module/sass）。</div>
-        <label data-i18n="upload_label">上传主题 zip 包 <span style="color:var(--muted);font-weight:400" data-i18n="upload_note">(用于无法使用 GitHub 的场景)</span></label>
-        <input type="file" id="themeFile" accept=".zip">
-        <button class="btn secondary" onclick="uploadTheme()" style="margin-top:10px" data-i18n="upload_btn">上传主题</button>
-        <div class="hint" data-i18n="upload_hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
-      </div>
-    </div>
     <div class="tab-panel" id="tab-settings">
       <div class="subtabs">
-        <button class="subtab active" onclick="switchSubTab('dash')" data-i18n="sub_dash">📊 仪表板</button>
+        <button class="subtab active" onclick="switchSubTab('theme')" data-i18n="nav_theme">🎨 主题</button>
         <button class="subtab" onclick="switchSubTab('proxy')" data-i18n="sub_proxy">⚙️ 代理</button>
+        <button class="subtab" onclick="switchSubTab('api')" data-i18n="sub_api">🤖 API</button>
       </div>
-      <div class="subpanel active" id="sub-dash">
+      <div class="subpanel active" id="sub-theme">
         <div class="panel">
-          <h2 data-i18n="dash_title">📊 服务状态</h2>
-          <div class="stat-grid" id="statGrid"></div>
-        </div>
-        <div class="panel">
-          <h2 data-i18n="console_title">📜 日志控制台</h2>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-            <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
-              <option value="hugo">Hugo 日志</option>
-              <option value="manager">管理面板日志</option>
-            </select>
-            <select id="logDate" onchange="loadLogs()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
-              <option value="">当前</option>
-            </select>
-            <button class="btn secondary" onclick="loadLogs()" data-i18n="refresh">🔄 刷新</button>
-            <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
+          <h2 data-i18n="theme_title">🎨 主题管理</h2>
+          <div class="hint" id="curTheme" style="margin-bottom:8px"></div>
+          <table id="themesTable">
+            <thead><tr><th data-i18n="th_theme">主题</th><th data-i18n="th_status">状态</th><th data-i18n="th_action">操作</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="msg" id="themeMsg"></div>
+          <label data-i18n="install_online_label">在线安装 (git 仓库 或 Hugo Module)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="installInput" placeholder="https://github.com/user/theme.git 或 github.com/bep/docuapi">
+            <button class="btn secondary" onclick="installTheme()" style="width:auto;white-space:nowrap" data-i18n="install_btn">安装</button>
           </div>
-          <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
-          <pre id="logView" style="background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
-          <div class="hint" style="margin-top:8px" data-i18n="console_hint">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
+          <div class="hint" data-i18n="install_hint">git 地址自动克隆，module 路径自动下载；联网后自动检测依赖（module/sass）。</div>
+          <label data-i18n="upload_label">上传主题 zip 包 <span style="color:var(--muted);font-weight:400" data-i18n="upload_note">(用于无法使用 GitHub 的场景)</span></label>
+          <input type="file" id="themeFile" accept=".zip">
+          <button class="btn secondary" onclick="uploadTheme()" style="margin-top:10px" data-i18n="upload_btn">上传主题</button>
+          <div class="hint" data-i18n="upload_hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
         </div>
       </div>
       <div class="subpanel" id="sub-proxy">
@@ -995,6 +999,16 @@ th{color:var(--muted);font-weight:500;font-size:12px}
           <div class="hint" data-i18n="proxy_restart_hint">保存后重启应用生效（下载 module 时使用）。</div>
         </div>
       </div>
+      <div class="subpanel" id="sub-api">
+        <div class="panel">
+          <h2 data-i18n="api_title">🤖 API 使用指南</h2>
+          <p class="hint" style="margin-bottom:10px" data-i18n="api_hint">以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。</p>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <button class="btn secondary" onclick="copyApiDoc()" data-i18n="api_copy">📋 复制文档</button>
+          </div>
+          <pre id="apiDoc" style="background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.6"></pre>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -1003,7 +1017,7 @@ let apiToken = '';
 // ---------- i18n (中/EN) ----------
 const I18N = {
   zh: {
-    app_title:'Hugo Blog 管理', nav_write:'✍️ 写文章', nav_posts:'📄 文章列表', nav_theme:'🎨 主题', nav_settings:'⚙️ 设置',
+    app_title:'Hugo Blog 管理', nav_dash:'📊 仪表板', nav_write:'✍️ 写文章', nav_posts:'📄 文章列表', nav_theme:'🎨 主题', nav_settings:'⚙️ 设置',
     view_blog:'查看博客',
     new_post_title:'✍️ 新建文章', title_label:'标题 *', tags_label:'标签 (逗号分隔)', content_label:'内容 (Markdown)', save_publish:'保存并发布', save_hint:'保存后 Hugo 会自动重新渲染，稍等片刻刷新博客即可看到。',
     posts_title:'📄 文章列表', th_title:'标题', th_date:'日期', th_file:'文件名', prev_page:'‹ 上一页', next_page:'下一页 ›', no_posts:'暂无文章',
@@ -1012,14 +1026,15 @@ const I18N = {
     upload_label:'上传主题 zip 包', upload_note:'(用于无法使用 GitHub 的场景)', upload_btn:'上传主题', upload_hint:'上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。',
     proxy_title:'⚙️ 代理设置', proxy_hint:'用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。', proxy_addr_label:'代理地址 (HTTP/HTTPS 共用)', noproxy_label:'NO_PROXY', noproxy_optional:'(可选)', save_proxy:'保存代理设置', proxy_restart_hint:'保存后重启应用生效（下载 module 时使用）。',
     console_title:'📜 日志控制台', refresh:'🔄 刷新', download:'⬇️ 下载', current:'当前', console_hint:'日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。',
-    sub_dash:'📊 仪表板', sub_proxy:'⚙️ 代理', dash_title:'📊 服务状态',
+    sub_proxy:'⚙️ 代理', sub_api:'🤖 API', dash_title:'📊 服务状态',
+    api_title:'🤖 API 使用指南', api_hint:'以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。', api_copy:'📋 复制文档', api_copied:'✓ 已复制到剪贴板',
     stat_hugo:'Hugo 服务', stat_manager:'管理面板', stat_blog_port:'博客端口', stat_admin_port:'管理端口', stat_version:'Hugo 版本', stat_posts:'文章', stat_themes:'主题', stat_cur_theme:'当前主题', stat_running:'运行中', stat_stopped:'已停止',
     saving:'保存中…', saved:'✓ 已保存:', rendering:'(Hugo 自动渲染中)', save_fail:'保存失败', deleting:'删除中…', deleted:'✓ 已删除主题:', delete_fail:'删除失败', del_confirm:'确定删除主题「{name}」吗？',
     switching:'切换中…', switched:'✓ 已切换到主题:', switch_fail:'切换失败', uploading:'上传中…', uploaded:'✓ 主题已上传:', upload_fail:'上传失败', pls_zip:'请选择 zip 文件', no_theme:'请输入 git 地址或 module 路径', installing:'安装中… (可能需要一些时间)', installed:'✓ 主题已安装:', deps:'依赖', install_fail:'安装失败', invalid_install:'无法识别：请输入 git 仓库地址 或 Hugo module 路径',
     proxy_saved:'✓ 代理设置已保存（重启应用生效）', proxy_save_fail:'保存失败', loading_log:'加载中…', load_log_fail:'加载日志失败:', log_read_fail:'读取失败', no_log:'无日志内容', no_log_data:'(暂无日志)', load_list_fail:'加载日志列表失败:', log_fmt:'{src} 日志 · {disp} · 共 {total} 行',
   },
   en: {
-    app_title:'Hugo Blog Admin', nav_write:'✍️ Write', nav_posts:'📄 Posts', nav_theme:'🎨 Themes', nav_settings:'⚙️ Settings',
+    app_title:'Hugo Blog Admin', nav_dash:'📊 Dashboard', nav_write:'✍️ Write', nav_posts:'📄 Posts', nav_theme:'🎨 Themes', nav_settings:'⚙️ Settings',
     view_blog:'View Blog',
     new_post_title:'✍️ New Post', title_label:'Title *', tags_label:'Tags (comma separated)', content_label:'Content (Markdown)', save_publish:'Save & Publish', save_hint:'Hugo re-renders automatically; refresh the blog shortly to see changes.',
     posts_title:'📄 Posts', th_title:'Title', th_date:'Date', th_file:'File', prev_page:'‹ Prev', next_page:'Next ›', no_posts:'No posts',
@@ -1028,7 +1043,8 @@ const I18N = {
     upload_label:'Upload theme zip', upload_note:'(for when GitHub is unavailable)', upload_btn:'Upload', upload_hint:'Zip must contain one theme dir (theme.toml or layouts).',
     proxy_title:'⚙️ Proxy Settings', proxy_hint:'Proxy used when Hugo downloads module theme deps (docuapi etc). Leave empty for direct.', proxy_addr_label:'Proxy address (shared HTTP/HTTPS)', noproxy_label:'NO_PROXY', noproxy_optional:'(optional)', save_proxy:'Save Proxy', proxy_restart_hint:'Takes effect after app restart (used when downloading modules).',
     console_title:'📜 Log Console', refresh:'🔄 Refresh', download:'⬇️ Download', current:'Current', console_hint:'Logs are archived by date. Current file keeps today only; history moves to data/logs/.',
-    sub_dash:'📊 Dashboard', sub_proxy:'⚙️ Proxy', dash_title:'📊 Service Status',
+    sub_proxy:'⚙️ Proxy', sub_api:'🤖 API', dash_title:'📊 Service Status',
+    api_title:'🤖 API Guide', api_hint:'Markdown doc of the admin REST API, copy-paste for an agent.', api_copy:'📋 Copy Doc', api_copied:'✓ Copied to clipboard',
     stat_hugo:'Hugo Service', stat_manager:'Admin Panel', stat_blog_port:'Blog Port', stat_admin_port:'Admin Port', stat_version:'Hugo Version', stat_posts:'Posts', stat_themes:'Themes', stat_cur_theme:'Current Theme', stat_running:'Running', stat_stopped:'Stopped',
     saving:'Saving…', saved:'✓ Saved:', rendering:'(Hugo re-rendering)', save_fail:'Save failed', deleting:'Deleting…', deleted:'✓ Deleted theme:', delete_fail:'Delete failed', del_confirm:'Delete theme "{name}"?',
     switching:'Switching…', switched:'✓ Switched to:', switch_fail:'Switch failed', uploading:'Uploading…', uploaded:'✓ Uploaded:', upload_fail:'Upload failed', pls_zip:'Select a zip file', no_theme:'Enter git URL or module path', installing:'Installing… (may take a while)', installed:'✓ Installed:', deps:'deps', install_fail:'Install failed', invalid_install:'Unrecognized: enter a git repo URL or a Hugo module path',
@@ -1081,7 +1097,7 @@ async function initToken(){
   try{
     const r = await fetch('/api/bootstrap');
     const d = await r.json();
-    if(d.api_token){ apiToken = d.api_token; initPrefs(); loadPosts(); loadThemes(); }
+    if(d.api_token){ apiToken = d.api_token; initPrefs(); loadStatus(); loadLogDates(); }
   }catch(e){}
 }
 async function loadPosts(){
@@ -1125,12 +1141,12 @@ function switchNav(tab){
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('tab-' + tab);
   if(panel) panel.classList.add('active');
+  if(tab === 'dash'){ loadStatus(); loadLogDates(); }
   if(tab === 'posts') loadPosts();
-  if(tab === 'theme') loadThemes();
-  if(tab === 'settings'){ switchSubTab('dash'); loadStatus(); loadLogDates(); }
+  if(tab === 'settings'){ switchSubTab('theme'); loadThemes(); }
   toggleSidebar(false); // 切导航后关闭移动端侧边栏
 }
-// 设置页内子 tab 切换 (仪表板/代理)
+// 设置页内子 tab 切换 (主题/代理)
 function switchSubTab(name){
   document.querySelectorAll('.subtab').forEach(b => b.classList.remove('active'));
   const btn = [...document.querySelectorAll('.subtab')].find(b => b.getAttribute('onclick').includes("'"+name+"'"));
@@ -1138,8 +1154,9 @@ function switchSubTab(name){
   document.querySelectorAll('.subpanel').forEach(p => p.classList.remove('active'));
   const sp = document.getElementById('sub-' + name);
   if(sp) sp.classList.add('active');
-  if(name === 'dash'){ loadStatus(); loadLogDates(); }
+  if(name === 'theme') loadThemes();
   if(name === 'proxy') loadProxy();
+  if(name === 'api') loadApiDoc();
 }
 // 加载服务状态卡片
 async function loadStatus(){
@@ -1207,7 +1224,7 @@ async function loadThemes(){
     return `<tr>
       <td>${escapeHtml(th.name)}${tag}</td>
       <td>${active ? '<span style="color:var(--accent)">'+t('in_use')+'</span>' : (th.valid ? t('available') : '<span style="color:var(--brand)">'+t('invalid')+'</span>')}</td>
-      <td>${th.valid && !active ? `<button class="btn secondary" onclick="switchTheme('${th.name}')">${t('use')}</button> <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${th.name}')">${t('delete')}</button>` : ''}</td>
+      <td>${!active && th.valid ? `<button class="btn secondary" onclick="switchTheme('${th.name}')">${t('use')}</button>` : ''}${!active && th.valid && !th.preset ? ` <button class="btn secondary" style="color:var(--brand)" onclick="deleteTheme('${th.name}')">${t('delete')}</button>` : ''}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="3">'+t('no_themes')+'</td></tr>';
 }
@@ -1365,6 +1382,90 @@ function downloadLog(){
   const date = document.getElementById('logDate').value || '';
   const q = 'source=' + encodeURIComponent(source) + (date ? '&date=' + encodeURIComponent(date) : '');
   window.open('/api/logs/download?' + q, '_blank');
+}
+// ---------- API 使用指南 (MD) ----------
+function buildApiDoc(){
+  const host = location.hostname;
+  const base = 'http://' + host + ':13134';
+  const lines = [
+    '# Hugo Blog 管理面板 API 指南',
+    '',
+    '> 管理面板端口 **13134**。除 `/api/bootstrap` 外，所有接口需 `Authorization: Bearer <token>`。',
+    '> 先 `GET /api/bootstrap` 获取 token。',
+    '',
+    '## 1. 获取 API Token',
+    '```bash',
+    'TOKEN=$(curl -s ' + base + '/api/bootstrap | jq -r ".api_token")',
+    'AUTH="Authorization: Bearer $TOKEN"',
+    '```',
+    '',
+    '## 2. 服务状态',
+    '```bash',
+    'curl -s -H "$AUTH" ' + base + '/api/info | jq',
+    '# 返回: hugo/manager 进程、端口、hugo 版本、文章/主题数、当前主题',
+    '```',
+    '',
+    '## 3. 文章',
+    '```bash',
+    '# 列表',
+    'curl -s -H "$AUTH" ' + base + '/api/posts | jq ".posts"',
+    '# 新建文章',
+    'curl -s -X POST ' + base + '/api/new -H "$AUTH" -H "Content-Type: application/json" \\',
+    '  -d \'{"title":"新文章","tags":"hugo,fnos","content":"# 正文\\n内容..."}\' | jq',
+    '```',
+    '',
+    '## 4. 主题',
+    '```bash',
+    '# 列表 + 当前主题',
+    'curl -s -H "$AUTH" ' + base + '/api/themes | jq',
+    '# 切换主题',
+    'curl -s -X POST ' + base + '/api/theme/switch -H "$AUTH" -H "Content-Type: application/json" -d \'{"theme":"minimal"}\' | jq',
+    '# 在线安装 (git URL 或 module 路径, 自动识别)',
+    'curl -s -X POST ' + base + '/api/theme/git -H "$AUTH" -H "Content-Type: application/json" -d \'{"url":"https://github.com/user/theme.git"}\' | jq',
+    'curl -s -X POST ' + base + '/api/theme/module -H "$AUTH" -H "Content-Type: application/json" -d \'{"module":"github.com/bep/docuapi"}\' | jq',
+    '# 删除主题 (不能删除使用中)',
+    'curl -s -X POST ' + base + '/api/theme/delete -H "$AUTH" -H "Content-Type: application/json" -d \'{"theme":"old-theme"}\' | jq',
+    '```',
+    '',
+    '## 5. 日志 (控制台)',
+    '```bash',
+    '# 日志来源列表 + 可用日期',
+    'curl -s -H "$AUTH" "' + base + '/api/logs/list?source=hugo" | jq',
+    '# 读取日志 (source=hugo|manager, 可选 date=YYYYMMDD, tail=N)',
+    'curl -s -H "$AUTH" "' + base + '/api/logs?source=hugo&tail=200" | jq',
+    '# 下载日志',
+    'curl -s -H "$AUTH" -o hugo.log "' + base + '/api/logs/download?source=hugo"',
+    '```',
+    '',
+    '## 6. 代理设置',
+    '```bash',
+    '# 读取',
+    'curl -s -H "$AUTH" ' + base + '/api/proxy | jq',
+    '# 设置 (HTTP/HTTPS 共用同一地址)',
+    'curl -s -X POST ' + base + '/api/proxy -H "$AUTH" -H "Content-Type: application/json" \\',
+    '  -d \'{"http":"http://192.168.31.31:7890","https":"http://192.168.31.31:7890","no_proxy":"localhost,127.0.0.1"}\' | jq',
+    '```',
+    '',
+    '## 认证说明',
+    '- token 存于数据目录 `api_token`，删除后重启应用会重新生成。',
+    '- 未认证请求返回 `401 unauthorized`。',
+  ];
+  return lines.join('\n');
+}
+function loadApiDoc(){
+  const el = document.getElementById('apiDoc');
+  if(el) el.textContent = buildApiDoc();
+}
+function copyApiDoc(){
+  const txt = buildApiDoc();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>alert(t('api_copied')));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    alert(t('api_copied'));
+  }
 }
 initToken();
 </script>
