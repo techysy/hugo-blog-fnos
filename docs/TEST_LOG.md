@@ -33,6 +33,7 @@
 
 - **module 主题不能简单切换** — 把 docuapi 这类 module 主题放进 themes/ 并 `theme="docuapi-master"`，hugo 启动会尝试下载 module 依赖并超时（`context deadline exceeded`），导致 hugo 卡住、13133 不监听、博客拒绝连接。正确：用管理面板「从 Hugo Module 安装」（`hugo mod get`）下载依赖。
 - **SCSS 主题需 Dart Sass** — 如 `anatole-master` 主题需要 Dart Sass 编译 SCSS（`TOCSS-DART: you need to install Dart Sass`），当前 hugo extended 不支持 → 渲染失败 → 启动失败。需装 dart-sass 或换无 SCSS 主题（如 minimal）。
+- **categories 字符串 vs 数组** — 迁移的历史文章若 `categories: jekyll`（字符串），anatole 等主题需数组 `categories: [jekyll]`，否则 `range can't iterate` 报错。已批量修复 18 篇（备份 /tmp/post_backup）。
 
 ---
 
