@@ -2,6 +2,33 @@
 
 ---
 
+## v0.1.4 (2026-08-09)
+
+### 新增 / Added
+
+- **主题管理增强** — 管理面板新增：
+  - **从 git 仓库安装**：`git clone` 到 `themes/`，无需转存 zip（`POST /api/theme/git`）
+  - **删除主题**：传统主题删 `themes/<name>/`，module 主题从 go.mod 移除；不能删除当前使用中的主题，含路径穿越检查
+  - **依赖自动检测**：检测 go.mod module require、assets SCSS，安装后提示
+- **代理设置** — 管理面板新增「设置」项，可配置 `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`（存 `DATA_DIR/proxy_config`），解决下载 module 主题慢/超时
+- **Agent API 认证** — 暴露带认证的 REST API：`GET /api/bootstrap` 免认证返回 `api_token`，其余 `/api/*` 需 `Authorization: Bearer ***`（token 存数据目录，权限 600）
+
+### 变更 / Changed
+
+- **管理面板 UI 重构**：
+  - 顶部 **tab 分页**切换：写文章 / 文章列表 / 主题
+  - **文章列表分页**（每页 10 篇，翻页控件）
+  - 导航移到**左侧边栏**，移动端加**汉堡菜单**（≤768px 侧边栏滑出 + 遮罩层）
+- **支持 Hugo Module 主题** — 用飞牛官方 `go-1.26` 依赖（不打包 go，fpk 更小），cmd/main 检测 go 路径配置 GOROOT/PATH/GOPROXY；管理面板「从 Hugo Module 安装」（`hugo mod get`）
+- **数据目录改回 `@appdata`** — 博客源放在应用私有目录 `/vol4/@appdata/hugo-blog/`，通过管理面板 API 管理，不暴露在公开 @appshare
+
+### 修复 / Fixes
+
+- **启动失败（残留文件权限）** — 修复 `.hugo_build.lock` 或 `public/` 渲染产物属主非 `hugo-blog` 用户导致的 `permission denied`。现 cmd/main 启动前删除 `.hugo_build.lock` 并清理 `public/`
+- **文章分类格式** — 迁移历史文章 `categories` 由字符串改为数组格式，避免主题 `range can't iterate` 报错
+
+---
+
 ## v0.1.3 (2026-08-09)
 
 ### 修复 / Fixes
