@@ -43,11 +43,18 @@ if [ ! -x "${HUGO_BIN}" ]; then
 fi
 
 # Hugo Modules 环境: 支持 module 依赖主题 (如 docuapi)
-# 需要 go 二进制 (打包在 server/go, 精简版 ~93MB)
-GO_DIR="${SRC_DIR}/go"
-if [ -x "${GO_DIR}/bin/go" ]; then
+# 依赖飞牛官方 go 依赖 (manifest install_dep_apps=go-1.26)
+GO_DIR=""
+for c in "/vol4/@appcenter/go-1.26" "/var/apps/go-1.26"; do
+    if [ -x "${c}/bin/go" ]; then
+        GO_DIR="${c}"
+        break
+    fi
+done
+if [ -n "${GO_DIR}" ]; then
     export GOROOT="${GO_DIR}"
     export PATH="${GO_DIR}/bin:${PATH}"
+    echo "  go: ${GO_DIR}" >> "${DIAG}" 2>&1
 fi
 export HUGO_MODULE_CACHE="${DATA_DIR}/.hugo_modules"
 export GOPROXY="https://goproxy.cn,direct"

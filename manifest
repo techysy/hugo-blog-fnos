@@ -12,3 +12,4 @@ desktop_uidir         = ui
 desktop_applaunchname = hugo-blog.Application
 service_port          = 13133
 ctl_stop              = true
+install_dep_apps      = go-1.26

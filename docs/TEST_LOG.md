@@ -8,16 +8,17 @@
 
 ### 更新点
 - **数据目录改回 @appdata** — 文章/博客源放 app 私有目录（`/vol4/@appdata/<app>`），通过管理面板 API 管理，不暴露在公开 @appshare
-- **支持 Hugo Module 依赖主题** — 打包精简 go（~93MB，去掉 src/test）进 fpk；cmd/main 配置 GOROOT/PATH/GOPROXY；管理面板加"从 Hugo Module 安装"（`hugo mod get`）
+- **支持 Hugo Module 依赖主题** — 依赖飞牛官方 go 依赖（`go-1.26`，Golang 1.26.4），manifest `install_dep_apps=go-1.26`；cmd/main 检测 go-1.26 路径配置 GOROOT/PATH/GOPROXY；管理面板加"从 Hugo Module 安装"（`hugo mod get`）。**不打包 go**（用官方依赖，fpk 小）。
+- （曾打包精简 go ~93MB，后因官方有 go-1.26 依赖改为引用官方）
 
 ### 问题点（已解决）
-1. **module 主题需 go** — hugo mod get 报 "binary go not found"。打包精简 go 解决。
-2. **docuapi 等 module 主题** — 通过 module 安装而非上传 zip 到 themes/。
+1. **module 主题需 go** — hugo mod get 报 "binary go not found"。用官方 go-1.26 依赖解决。
+2. **docuapi 等 module 主题** — 通过 module 安装（hugo mod get）而非上传 zip。
 
 ### 验证状态
-- [x] 打包 go + hugo mod get 下载 docuapi 成功
-- [x] module 主题渲染成功
-- [x] cmd/main go 环境配置
+- [x] cmd/main 检测官方 go-1.26 路径
+- [x] manifest 声明 go-1.26 依赖
+- [x] 无打包 go（fpk 恢复 ~21MB）
 
 ---
 
