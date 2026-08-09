@@ -15,11 +15,12 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 
 ## ✨ Features
 
-- 📝 **Auto-render on write** — drop markdown into `content/post/` and Hugo regenerates the site
+- 📝 **Auto-render on write** — create posts via the admin panel and Hugo regenerates the site
+- 🎛️ **Web admin panel** — write/list posts in the browser, no SSH needed
 - 🚀 **Zero-dependency** — single Hugo binary, no Node/Python runtime needed
 - 🗄️ **Persistent data** — blog source at `/vol4/@appshare/hugo-blog/`, writable and backup-able
 - 🔄 **App Center managed** — start/stop, auto-start on boot, status
-- 🌐 **One-click access** — desktop icon opens the blog
+- 🌐 **One-click access** — desktop icon opens the admin panel
 
 ## 🚀 Quick Install
 
@@ -29,9 +30,11 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 
 ## 📖 Usage
 
-### Write a post
+### Write a post (recommended: admin panel)
 
-Create a markdown file in `content/post/`:
+Open the desktop **Hugo Blog** icon (admin panel, port `13134`), fill in title/tags/content in the "Write post" form, click "Save & Publish". Hugo re-renders automatically; refresh the blog to see it.
+
+You can also drop a markdown file into `content/post/`:
 
 ```markdown
 ---
@@ -43,7 +46,12 @@ tags: [hugo, fnos]
 Body here.
 ```
 
-Save and Hugo **re-renders automatically**; refresh the browser to see it.
+### Ports
+
+| Service | Port | Purpose |
+|---|---|---|
+| Admin panel | `13134` | Write/list posts (desktop entry) |
+| Blog | `13133` | Site preview |
 
 ### Data directory
 
@@ -51,7 +59,6 @@ Save and Hugo **re-renders automatically**; refresh the browser to see it.
 |---|---|
 | Blog source | `/vol4/@appshare/hugo-blog/blog/` |
 | content | `/vol4/@appshare/hugo-blog/blog/content/` |
-| Port | `13133` |
 
 ### Change theme
 

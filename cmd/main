@@ -5,8 +5,11 @@ APP_NAME="${TRIM_APPNAME:-hugo-blog}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
 DATA_DIR="${TRIM_PKGVAR:-/vol4/@appshare/${APP_NAME}}"
 PORT="${TRIM_SERVICE_PORT:-13133}"
+MGMT_PORT=13134
 LOG="${DATA_DIR}/hugo.log"
 PID_FILE="${DATA_DIR}/hugo.pid"
+MGMT_PID_FILE="${DATA_DIR}/manager.pid"
+MGMT_LOG="${DATA_DIR}/manager.log"
 
 # 诊断日志（便于排查 fnOS 调用方式）
 DIAG="${DATA_DIR}/hugo-diag.log"
@@ -74,11 +77,29 @@ start() {
     echo $! > "${PID_FILE}"
     sleep 2
     if kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+        start_manager
         echo "started (pid $(cat "${PID_FILE}"))"
         return 0
     else
         echo "ERROR: hugo failed to start, see ${LOG}" >&2
         return 1
+    fi
+}
+
+start_manager() {
+    echo "  start_manager()" >> "${DIAG}" 2>&1
+    if [ -f "${MGMT_PID_FILE}" ] && kill -0 "$(cat "${MGMT_PID_FILE}")" 2>/dev/null; then
+        return 0
+    fi
+    if ss -tln 2>/dev/null | grep -q ":${MGMT_PORT} "; then
+        echo "  manager port ${MGMT_PORT} busy" >> "${DIAG}" 2>&1
+        return 0
+    fi
+    PY="${SRC_DIR}/manager.py"
+    if [ -f "$PY" ]; then
+        setsid /usr/bin/python3 "$PY" "${BLOG_DIR}" "${MGMT_PORT}" \
+            >> "${MGMT_LOG}" 2>&1 &
+        echo $! > "${MGMT_PID_FILE}"
     fi
 }
 
@@ -90,6 +111,12 @@ stop() {
     fi
     pkill -f "hugo server.*${BLOG_DIR}" 2>/dev/null || true
     rm -f "${PID_FILE}"
+    # 停止管理服务
+    if [ -f "${MGMT_PID_FILE}" ] && kill -0 "$(cat "${MGMT_PID_FILE}")" 2>/dev/null; then
+        kill "$(cat "${MGMT_PID_FILE}")" 2>/dev/null || true
+    fi
+    pkill -f "manager.py.*${BLOG_DIR}" 2>/dev/null || true
+    rm -f "${MGMT_PID_FILE}"
     echo "stopped"
 }
 
