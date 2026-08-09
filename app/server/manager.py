@@ -1089,11 +1089,11 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang 
 .tab-panel.active{display:block}
 /* 其他 tab 内容超高时内部滚动 */
 #tab-write.active,#tab-posts.active,#tab-settings.active{overflow-y:auto}
-/* 仪表盘: 填满视口(不滚动), 日志控制台卡片收窄居中 */
+/* 仪表盘: 填满视口(不滚动), 日志控制台宽度与服务状态一致 */
 #tab-dash.active{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 #tab-dash>.panel{flex-shrink:0}
-/* 📜 日志控制台卡片: 默认宽度不占满, 收窄居中 */
-#tab-dash>.panel:last-child{flex:1;display:flex;flex-direction:column;margin-bottom:0;min-height:0;max-width:1100px;width:100%;margin-left:auto;margin-right:auto}
+/* 📜 日志控制台卡片: 宽度与服务状态一致 */
+#tab-dash>.panel:last-child{flex:1;display:flex;flex-direction:column;margin-bottom:0;min-height:0;width:100%}
 #tab-dash .log-view{flex:1;min-height:0;max-height:none;overflow-y:auto}
 /* 日志控制台 控件区 + 显示区 (响应式) */
 .log-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
@@ -1240,7 +1240,6 @@ th{color:var(--muted);font-weight:500;font-size:12px}
       <div class="subpanel active" id="sub-theme">
         <div class="panel">
           <h2 data-i18n="theme_title">🎨 主题管理</h2>
-          <div class="hint" id="curTheme" style="margin-bottom:8px"></div>
           <div class="themes-grid" id="themesGrid"></div>
           <div class="msg" id="themeMsg"></div>
           <label data-i18n="install_online_label">在线安装 (git 仓库 或 Hugo Module)</label>
@@ -1521,7 +1520,6 @@ function escapeHtml(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','
 async function loadThemes(){
   const r = await apiFetch('/api/themes');
   const d = await r.json();
-  document.getElementById('curTheme').textContent = d.current ? '· ' + t('th_theme').replace('主题','') + ': ' + d.current : '';
   const grid = document.getElementById('themesGrid');
   grid.innerHTML = (d.themes||[]).map(th=>{
     const active = th.name === d.current;
