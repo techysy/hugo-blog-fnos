@@ -19,7 +19,7 @@ Hugo 静态博客 — 常驻渲染服务，在飞牛 NAS (fnOS) 上写文章自�
 - 🎛️ **Web 管理面板** — 浏览器里新建/查看/换主题，无需 SSH
 - 🎨 **主题管理** — 管理面板里上传主题、一键切换
 - 🚀 **零依赖** — Hugo 单二进制，无需 Node/Python 运行时
-- 🗄️ **数据持久化** — 博客源在 `/vol4/@appshare/hugo-blog/`，可写、可备份
+- 🗄️ **数据持久化** — 博客源在 `/vol4/@appdata/hugo-blog/`，可写、可备份
 - 🔄 **App Center 管理** — 启停、开机自启、状态查看
 - 🌐 **一键访问** — 桌面图标打开博客
 
@@ -58,16 +58,19 @@ tags: [hugo, fnos]
 
 | 项 | 值 |
 |---|---|
-| 博客源 | `/vol4/@appshare/hugo-blog/blog/` |
-| content | `/vol4/@appshare/hugo-blog/blog/content/` |
+| 博客源 | `/vol4/@appdata/hugo-blog/blog/` |
+| content | `/vol4/@appdata/hugo-blog/blog/content/` |
 
 ### 换主题（管理面板）
 
 打开管理面板（`http://<NAS-IP>:13134`），在「主题管理」里：
 1. **上传主题**：上传主题 zip 包（含 theme.toml 或 layouts 目录）
-2. **一键切换**：点击「使用」即可切换主题，Hugo 自动重新渲染
+2. **从 Hugo Module 安装**：输入 module 路径（如 `github.com/bep/docuapi`），联网下载安装（需依赖飞牛 `go-1.26`）
+3. **一键切换**：点击「使用」即可切换主题，Hugo 自动重新渲染
 
-也可直接在数据目录放主题：把主题放到 `/vol4/@appshare/hugo-blog/blog/themes/<name>/`，并在 `config/_default/config.toml` 改 `theme = "<name>"`。
+也可直接在数据目录放主题：把主题放到 `/vol4/@appdata/hugo-blog/blog/themes/<name>/`，并在 `config/_default/config.toml` 改 `theme = "<name>"`。
+
+> 📦 **两类主题**：传统 zip 主题（上传到 themes/）和 Hugo Module 主题（如 docuapi，通过 `hugo mod get` 安装）。module 主题需要 `go-1.26` 依赖（安装时自动装）。
 
 ### 🤖 Agent API（查询/创建文章）
 
@@ -95,7 +98,7 @@ curl -s -X POST http://<NAS-IP>:13134/api/theme/switch \
   -d '{"theme":"minimal"}'
 ```
 
-> 🔐 **认证**：除 `/api/bootstrap` 外，所有 `/api/*` 需 `Authorization: Bearer <token>`。未带 token 返回 **401**。token 存于 `/vol4/@appshare/hugo-blog/api_token`（权限 600），删除该文件后重启应用会重新生成。
+> 🔐 **认证**：除 `/api/bootstrap` 外，所有 `/api/*` 需 `Authorization: Bearer <token>`。未带 token 返回 **401**。token 存于 `/vol4/@appdata/hugo-blog/api_token`（权限 600），删除该文件后重启应用会重新生成。
 > 💡 agent 创建文章后，Hugo 自动重新渲染，刷新博客（13133）即可看到。
 
 ## 🐛 问题排查

@@ -19,7 +19,7 @@ Hugo static blog — a resident rendering service that auto-generates your site 
 - 🎛️ **Web admin panel** — write/list posts and switch themes in the browser, no SSH needed
 - 🎨 **Theme manager** — upload and switch themes from the admin panel
 - 🚀 **Zero-dependency** — single Hugo binary, no Node/Python runtime needed
-- 🗄️ **Persistent data** — blog source at `/vol4/@appshare/hugo-blog/`, writable and backup-able
+- 🗄️ **Persistent data** — blog source at `/vol4/@appdata/hugo-blog/`, writable and backup-able
 - 🔄 **App Center managed** — start/stop, auto-start on boot, status
 - 🌐 **One-click access** — desktop icon opens the blog
 
@@ -58,8 +58,8 @@ Body here.
 
 | Item | Value |
 |---|---|
-| Blog source | `/vol4/@appshare/hugo-blog/blog/` |
-| content | `/vol4/@appshare/hugo-blog/blog/content/` |
+| Blog source | `/vol4/@appdata/hugo-blog/blog/` |
+| content | `/vol4/@appdata/hugo-blog/blog/content/` |
 
 ### Change theme (admin panel)
 
@@ -67,7 +67,7 @@ Open the admin panel (`http://<NAS-IP>:13134`), in the "Theme manager":
 1. **Upload theme**: upload a theme zip (containing `theme.toml` or a `layouts` dir)
 2. **One-click switch**: click "Use" to switch; Hugo re-renders automatically
 
-You can also drop a theme into `/vol4/@appshare/hugo-blog/blog/themes/<name>/` and set `theme = "<name>"` in `config/_default/config.toml`.
+You can also drop a theme into `/vol4/@appdata/hugo-blog/blog/themes/<name>/` and set `theme = "<name>"` in `config/_default/config.toml`.
 
 ### 🤖 Agent API (query/create posts)
 
@@ -95,7 +95,7 @@ curl -s -X POST http://<NAS-IP>:13134/api/theme/switch \
   -d '{"theme":"minimal"}'
 ```
 
-> 🔐 **Auth**: except `/api/bootstrap`, all `/api/*` require `Authorization: Bearer <token>`. Missing token returns **401**. Token is stored at `/vol4/@appshare/hugo-blog/api_token` (mode 600); delete it and restart to regenerate.
+> 🔐 **Auth**: except `/api/bootstrap`, all `/api/*` require `Authorization: Bearer <token>`. Missing token returns **401**. Token is stored at `/vol4/@appdata/hugo-blog/api_token` (mode 600); delete it and restart to regenerate.
 > 💡 After a post is created, Hugo auto re-renders; refresh the blog (13133) to see it.
 
 ## 🐛 Troubleshooting
