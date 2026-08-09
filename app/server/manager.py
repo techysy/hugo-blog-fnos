@@ -234,6 +234,132 @@ def _pid_alive(pid):
         return False
 
 
+def build_api_doc():
+    """生成 API 使用指南 Markdown 文档 (供设置页 API 标签展示/复制)."""
+    base = "http://<NAS-IP>:13134"
+    lines = [
+        "# Hugo Blog 管理面板 API 指南",
+        "",
+        "> 管理面板端口 **13134**。除 `/api/bootstrap` 外，所有接口需 `Authorization: Bearer <token>`。",
+        "> **解析 JSON 用 python3**（fnOS 及多数系统自带），无需 jq；若已装 jq 可把 `python3 -m json.tool` 换成 `jq`。",
+        "",
+        "## 1. 一键测试脚本 (推荐, 复制即用)",
+        "保存为 `test-api.sh`，`chmod +x test-api.sh` 后运行：",
+        "```bash",
+        "#!/usr/bin/env bash",
+        "# Hugo Blog API 一键测试 (curl + python3, 无需 jq)",
+        "set -u",
+        'BASE="' + base + '"',
+        'TOKEN=$(curl -s "$BASE/api/bootstrap" | python3 -c "import sys,json;print(json.load(sys.stdin).get(\'api_token\',\'\'))")',
+        'if [ -z "$TOKEN" ]; then echo "获取 token 失败"; exit 1; fi',
+        'AUTH="Authorization: Bearer $TOKEN"',
+        'echo "Token: ${TOKEN:0:8}..."',
+        'echo; echo "== 服务状态 /api/info =="',
+        'curl -s -H "$AUTH" "$BASE/api/info" | python3 -m json.tool',
+        'echo; echo "== 文章数 /api/posts =="',
+        'curl -s -H "$AUTH" "$BASE/api/posts" | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'文章数:\',len(d[\'posts\']))"',
+        'echo; echo "== 当前主题 /api/themes =="',
+        'curl -s -H "$AUTH" "$BASE/api/themes" | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'当前:\',d[\'current\'])"',
+        'echo; echo "== 最近日志 /api/logs =="',
+        'curl -s -H "$AUTH" "$BASE/api/logs?source=hugo&tail=20" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d[\'content\'])"',
+        'echo; echo "== 测试完成 =="',
+        "```",
+        "",
+        "## 2. 各接口单独调用",
+        "",
+        "### 2.1 获取 Token",
+        "```bash",
+        'TOKEN=$(curl -s ' + base + '/api/bootstrap | python3 -c "import sys,json;print(json.load(sys.stdin).get(\'api_token\',\'\'))")',
+        'AUTH="Authorization: Bearer $TOKEN"',
+        "```",
+        "",
+        "### 2.2 服务状态",
+        "```bash",
+        'curl -s -H "$AUTH" ' + base + '/api/info | python3 -m json.tool',
+        "```",
+        "",
+        "### 2.3 文章",
+        "```bash",
+        'curl -s -H "$AUTH" ' + base + '/api/posts | python3 -c "import sys,json;d=json.load(sys.stdin);print(\'文章数:\',len(d[\'posts\']))"',
+        "# 新建文章 (JSON 用文件, 见下方 post.json 示例)",
+        'curl -s -X POST ' + base + '/api/new -H "$AUTH" -H "Content-Type: application/json" -d @post.json | python3 -m json.tool',
+        "```",
+        "",
+        "### 2.4 主题",
+        "```bash",
+        'curl -s -H "$AUTH" ' + base + '/api/themes | python3 -m json.tool',
+        "# 切换主题 (JSON 用文件, 见下方 theme.json 示例)",
+        'curl -s -X POST ' + base + '/api/theme/switch -H "$AUTH" -H "Content-Type: application/json" -d @theme.json | python3 -m json.tool',
+        "# 在线安装: git 仓库 / Hugo Module",
+        'curl -s -X POST ' + base + '/api/theme/git -H "$AUTH" -H "Content-Type: application/json" -d @git.json | python3 -m json.tool',
+        'curl -s -X POST ' + base + '/api/theme/module -H "$AUTH" -H "Content-Type: application/json" -d @module.json | python3 -m json.tool',
+        "# 删除主题",
+        'curl -s -X POST ' + base + '/api/theme/delete -H "$AUTH" -H "Content-Type: application/json" -d @delete.json | python3 -m json.tool',
+        "```",
+        "",
+        "### 2.5 日志 (控制台)",
+        "```bash",
+        'curl -s -H "$AUTH" "' + base + '/api/logs/list?source=hugo" | python3 -m json.tool',
+        'curl -s -H "$AUTH" "' + base + '/api/logs?source=hugo&tail=200" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d[\'content\'])"',
+        'curl -s -H "$AUTH" -o hugo.log "' + base + '/api/logs/download?source=hugo"',
+        "```",
+        "",
+        "### 2.6 代理设置",
+        "```bash",
+        'curl -s -H "$AUTH" ' + base + '/api/proxy | python3 -m json.tool',
+        "# 设置代理 (HTTP/HTTPS 共用同一地址)",
+        'curl -s -X POST ' + base + '/api/proxy -H "$AUTH" -H "Content-Type: application/json" -d @proxy.json | python3 -m json.tool',
+        "```",
+        "",
+        "## JSON 参数文件示例",
+        "### post.json",
+        "```json",
+        "{",
+        '  "title": "新文章",',
+        '  "tags": "hugo, fnos",',
+        '  "content": "# 标题"',
+        "}",
+        "```",
+        "### theme.json",
+        "```json",
+        "{",
+        '  "theme": "minimal"',
+        "}",
+        "```",
+        "### git.json",
+        "```json",
+        "{",
+        '  "url": "https://github.com/user/theme.git"',
+        "}",
+        "```",
+        "### module.json",
+        "```json",
+        "{",
+        '  "module": "github.com/bep/docuapi"',
+        "}",
+        "```",
+        "### delete.json",
+        "```json",
+        "{",
+        '  "theme": "old-theme"',
+        "}",
+        "```",
+        "### proxy.json",
+        "```json",
+        "{",
+        '  "http": "http://192.168.31.31:7890",',
+        '  "https": "http://192.168.31.31:7890",',
+        '  "no_proxy": "localhost,127.0.0.1"',
+        "}",
+        "```",
+        "",
+        "## 认证说明",
+        "- token 存于数据目录 `api_token`，删除后重启应用会重新生成。",
+        "- 未认证请求返回 `401 unauthorized`。",
+    ]
+    return "\n".join(lines)
+
+
 def get_proxy():
     """读取代理配置. 返回 {http, https, no_proxy}"""
     http = https = ""
@@ -654,6 +780,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not self._check_auth():
                 return
             self._send(200, json.dumps(get_service_status()))
+        elif path == "/api/doc":
+            # API 使用指南 Markdown 文档
+            if not self._check_auth():
+                return
+            self._send(200, json.dumps({"doc": build_api_doc()}))
         elif path == "/api/proxy":
             if not self._check_auth():
                 return
@@ -848,11 +979,19 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang 
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:999;border:none}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
+/* 日志控制台 控件区 + 显示区 (响应式) */
+.log-controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.log-controls select,.log-controls button{flex:0 0 auto}
+.log-view{background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5}
 @media (max-width:768px){
   .sidebar{position:fixed;left:-220px;top:0;bottom:0;z-index:1000;transition:left .25s ease;height:100vh;overflow-y:auto}
   .sidebar.open{left:0}
   .hamburger{display:inline-block}
   .sidebar-overlay.show{display:block}
+  /* 日志控制台移动端适配 */
+  .log-controls select{flex:1 1 auto;min-width:0}
+  .log-controls button{flex:1 1 auto}
+  .log-view{max-height:calc(100vh - 240px);font-size:11px;padding:10px}
 }
 /* 分页控件 */
 .pager{display:flex;align-items:center;gap:8px;margin-top:12px;justify-content:center}
@@ -918,7 +1057,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
       </div>
       <div class="panel">
         <h2 data-i18n="console_title">📜 日志控制台</h2>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <div class="log-controls">
           <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
             <option value="hugo">Hugo 日志</option>
             <option value="manager">管理面板日志</option>
@@ -930,7 +1069,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
           <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
         </div>
         <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
-        <pre id="logView" style="background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
+        <pre id="logView" class="log-view"></pre>
         <div class="hint" style="margin-top:8px" data-i18n="console_hint">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
       </div>
     </div>
@@ -1006,7 +1145,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
             <button class="btn secondary" onclick="copyApiDoc()" data-i18n="api_copy">📋 复制文档</button>
           </div>
-          <pre id="apiDoc" style="background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.6"></pre>
+          <div id="apiDoc" class="api-doc" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;max-height:70vh;overflow-y:auto"></div>
         </div>
       </div>
     </div>
@@ -1383,88 +1522,56 @@ function downloadLog(){
   const q = 'source=' + encodeURIComponent(source) + (date ? '&date=' + encodeURIComponent(date) : '');
   window.open('/api/logs/download?' + q, '_blank');
 }
-// ---------- API 使用指南 (MD) ----------
-function buildApiDoc(){
-  const host = location.hostname;
-  const base = 'http://' + host + ':13134';
-  const T = [];
-  T.push(`# Hugo Blog 管理面板 API 指南`);
-  T.push(``);
-  T.push(`> 管理面板端口 **13134**。除 /api/bootstrap 外，所有接口需 Authorization: Bearer <token>。`);
-  T.push(`> 先 GET /api/bootstrap 获取 token。`);
-  T.push(``);
-  T.push(`## 1. 获取 API Token`);
-  T.push(`\`\`\`bash`);
-  T.push(`TOKEN=$(curl -s ${base}/api/bootstrap | jq -r ".api_token")`);
-  T.push(`AUTH="Authorization: Bearer $TOKEN"`);
-  T.push(`\`\`\``);
-  T.push(``);
-  T.push(`## 2. 服务状态`);
-  T.push(`\`\`\`bash`);
-  T.push(`curl -s -H "$AUTH" ${base}/api/info | jq`);
-  T.push(`\`\`\``);
-  T.push(``);
-  T.push(`## 3. 文章`);
-  T.push(`\`\`\`bash`);
-  T.push(`curl -s -H "$AUTH" ${base}/api/posts | jq ".posts"`);
-  T.push(`# 新建文章 (JSON 用文件, 见下方 post.json 示例)`);
-  T.push(`curl -s -X POST ${base}/api/new -H "$AUTH" -H "Content-Type: application/json" -d @post.json | jq`);
-  T.push(`\`\`\``);
-  T.push(``);
-  T.push(`## 4. 主题`);
-  T.push(`\`\`\`bash`);
-  T.push(`curl -s -H "$AUTH" ${base}/api/themes | jq`);
-  T.push(`# 切换主题 (JSON 用文件, 见下方 theme.json 示例)`);
-  T.push(`curl -s -X POST ${base}/api/theme/switch -H "$AUTH" -H "Content-Type: application/json" -d @theme.json | jq`);
-  T.push(`# 在线安装: git 仓库`);
-  T.push(`curl -s -X POST ${base}/api/theme/git -H "$AUTH" -H "Content-Type: application/json" -d '{"url":"https://github.com/user/theme.git"}' | jq`);
-  T.push(`# 在线安装: Hugo Module`);
-  T.push(`curl -s -X POST ${base}/api/theme/module -H "$AUTH" -H "Content-Type: application/json" -d '{"module":"github.com/bep/docuapi"}' | jq`);
-  T.push(`# 删除主题`);
-  T.push(`curl -s -X POST ${base}/api/theme/delete -H "$AUTH" -H "Content-Type: application/json" -d '{"theme":"old-theme"}' | jq`);
-  T.push(`\`\`\``);
-  T.push(``);
-  T.push(`## 5. 日志 (控制台)`);
-  T.push(`\`\`\`bash`);
-  T.push(`curl -s -H "$AUTH" "${base}/api/logs/list?source=hugo" | jq`);
-  T.push(`curl -s -H "$AUTH" "${base}/api/logs?source=hugo&tail=200" | jq`);
-  T.push(`curl -s -H "$AUTH" -o hugo.log "${base}/api/logs/download?source=hugo"`);
-  T.push(`\`\`\``);
-  T.push(``);
-  T.push(`## 6. 代理设置`);
-  T.push(`\`\`\`bash`);
-  T.push(`curl -s -H "$AUTH" ${base}/api/proxy | jq`);
-  T.push(`# 设置代理 (HTTP/HTTPS 共用同一地址)`);
-  T.push(`curl -s -X POST ${base}/api/proxy -H "$AUTH" -H "Content-Type: application/json" -d '{"http":"http://192.168.31.31:7890","https":"http://192.168.31.31:7890","no_proxy":"localhost,127.0.0.1"}' | jq`);
-  T.push(`\`\`\``);
-  T.push(``);
-  T.push(`## 认证说明`);
-  T.push(`- token 存于数据目录 api_token，删除后重启应用会重新生成。`);
-  T.push(`- 未认证请求返回 401 unauthorized。`);
-  T.push(``);
-  T.push(`### 新建文章 post.json 示例`);
-  T.push(`\`\`\`json`);
-  T.push(`{`);
-  T.push(`  "title": "新文章",`);
-  T.push(`  "tags": "hugo, fnos",`);
-  T.push(`  "content": "# 标题"`);
-  T.push(`}`);
-  T.push(`\`\`\``);
-  T.push(``);
-  T.push(`### 切换主题 theme.json 示例`);
-  T.push(`\`\`\`json`);
-  T.push(`{`);
-  T.push(`  "theme": "minimal"`);
-  T.push(`}`);
-  T.push(`\`\`\``);
-  return T.join("\\n");
+// ---------- API 使用指南 (Markdown 渲染 + 复制) ----------
+let apiDocMd = '';
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function loadApiDoc(){
+function renderMarkdown(md){
+  const out = [];
+  const lines = md.split("\\n");
+  let inCode = false, codeBuf = [];
+  const flushCode = () => {
+    if(codeBuf.length){
+      out.push('<pre style="background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:10px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace;line-height:1.6">'+escHtml(codeBuf.join("\\n"))+'</pre>');
+      codeBuf = [];
+    }
+  };
+  for(let i=0;i<lines.length;i++){
+    const line = lines[i];
+    if(/^```/.test(line)){
+      if(inCode){ flushCode(); inCode=false; }
+      else { inCode=true; codeBuf=[]; }
+      continue;
+    }
+    if(inCode){ codeBuf.push(line); continue; }
+    if(/^###\s+/.test(line)){ out.push('<div style="margin:14px 0 6px;font-weight:700;font-size:14px">'+escHtml(line.replace(/^###\s+/,''))+'</div>'); }
+    else if(/^##\s+/.test(line)){ out.push('<div style="margin:16px 0 6px;font-weight:700;font-size:15px">'+escHtml(line.replace(/^##\s+/,''))+'</div>'); }
+    else if(/^#\s+/.test(line)){ out.push('<div style="margin:16px 0 8px;font-weight:700;font-size:17px">'+escHtml(line.replace(/^#\s+/,''))+'</div>'); }
+    else if(/^>\s+/.test(line)){ out.push('<div style="border-left:3px solid var(--accent);padding:4px 10px;color:var(--muted);margin:6px 0;background:var(--card2)">'+escHtml(line.replace(/^>\s+/,''))+'</div>'); }
+    else if(/^-\s+/.test(line)){ out.push('<div style="padding:2px 0">• '+escHtml(line.replace(/^-\s+/,''))+'</div>'); }
+    else if(/^```/.test(line)){ }
+    else if(line.trim()===''){ out.push('<div style="height:6px"></div>'); }
+    else { out.push('<div style="padding:1px 0">'+escHtml(line)+'</div>'); }
+  }
+  flushCode();
+  return out.join("\\n");
+}
+async function loadApiDoc(){
   const el = document.getElementById('apiDoc');
-  if(el) el.textContent = buildApiDoc();
+  if(!el) return;
+  try{
+    if(!apiDocMd){
+      const r = await apiFetch('/api/doc');
+      const d = await r.json();
+      apiDocMd = d.doc || '';
+    }
+    el.innerHTML = renderMarkdown(apiDocMd);
+  }catch(e){ el.textContent = t('load_log_fail') + ' ' + e; }
 }
 function copyApiDoc(){
-  const txt = buildApiDoc();
+  const txt = apiDocMd || '';
+  if(!txt) return;
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(txt).then(()=>alert(t('api_copied')));
   } else {
