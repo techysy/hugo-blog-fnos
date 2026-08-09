@@ -24,6 +24,8 @@ from pathlib import Path
 
 BLOG_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/vol4/@appdata/hugo-blog/blog")
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 13134
+# 应用版本 (与 manifest 保持一致, 用于品牌区/仪表板显示)
+APP_VERSION = "0.1.4.7"
 CONTENT_DIR = BLOG_DIR / "content"
 POST_DIR = CONTENT_DIR / "post"
 THEMES_DIR = BLOG_DIR / "themes"
@@ -764,6 +766,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, json.dumps({
                 "api_token": API_TOKEN,
                 "blog_dir": str(BLOG_DIR),
+                "version": APP_VERSION,
             }))
         elif path == "/api/posts":
             if not self._check_auth():
@@ -968,7 +971,8 @@ INDEX_HTML = """<!DOCTYPE html>
 body{background:var(--bg);color:var(--text);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}
 .layout{display:flex;min-height:100vh}
 .sidebar{width:200px;background:var(--card);border-right:1px solid var(--border);padding:16px 10px;flex-shrink:0}
-.sidebar .brand{font-size:15px;font-weight:700;padding:4px 12px 14px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.sidebar .brand{font-size:15px;font-weight:700;padding:4px 12px 14px;border-bottom:1px solid var(--border);margin-bottom:10px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.sidebar .brand-ver{font-size:11px;font-weight:400;color:var(--muted);line-height:1}
 .nav-item{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--muted);margin-bottom:2px}
 .nav-item.active{background:rgba(56,189,248,.12);color:var(--accent);font-weight:600}
 .main{flex:1;padding:16px;min-width:0;display:flex;flex-direction:column;min-height:100vh}
@@ -1032,7 +1036,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <body data-theme="light">
 <div class="layout">
   <div class="sidebar" id="sidebar">
-    <div class="brand">📝 Hugo Blog</div>
+    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.7</div></div>
     <div class="nav-item active" onclick="switchNav('dash')" data-i18n="nav_dash">📊 仪表板</div>
     <div class="nav-item" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
@@ -1237,6 +1241,7 @@ async function initToken(){
     const r = await fetch('/api/bootstrap');
     const d = await r.json();
     if(d.api_token){ apiToken = d.api_token; initPrefs(); loadStatus(); loadLogDates(); }
+    if(d.version){ const bv = document.getElementById('brandVer'); if(bv) bv.textContent = 'v' + d.version; }
   }catch(e){}
 }
 async function loadPosts(){
