@@ -4,6 +4,16 @@
 
 ---
 
+## 0.1.3.2 (2026-08-09)
+
+### 更新点
+- **cmd/main 启动 hugo 前删除 `.hugo_build.lock`** — 避免残留 lock（属主非 hugo-blog）导致权限拒绝、启动失败
+
+### 问题点（已解决）
+1. **启动失败（0.1.3.1）** — 根因：`.hugo_build.lock` 属主是 `yangyu`（SSH 手动测试创建），hugo-blog 用户无法写 → `permission denied`。修复：cmd/main 启动前 `rm -f .hugo_build.lock`，hugo 以 hugo-blog 用户重新创建。
+
+---
+
 ## 0.1.3.1 (2026-08-09)
 
 ### 更新点
