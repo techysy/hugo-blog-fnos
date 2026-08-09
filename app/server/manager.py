@@ -890,6 +890,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <body data-theme="light">
 <div class="layout">
   <div class="sidebar" id="sidebar">
+    <div class="brand">📝 Hugo Blog</div>
     <div class="nav-item active" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
     <div class="nav-item" onclick="switchNav('theme')" data-i18n="nav_theme">🎨 主题</div>
@@ -977,7 +978,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
             <button class="btn secondary" onclick="downloadLog()" data-i18n="download">⬇️ 下载</button>
           </div>
           <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
-          <pre id="logView" style="background:#0b0e11;color:#d4d4d4;border:1px solid #222;border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
+          <pre id="logView" style="background:rgba(0,0,0,0.82);color:#d4d4d4;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
           <div class="hint" style="margin-top:8px" data-i18n="console_hint">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
         </div>
       </div>
@@ -1149,10 +1150,8 @@ async function loadStatus(){
     const d = await r.json();
     const dot = on => '<span class="stat-dot ' + (on?'dot-on':'dot-off') + '"></span>';
     const cards = [
-      {k:t('stat_hugo'), v:(d.hugo && d.hugo.running) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
-      {k:t('stat_manager'), v:(d.manager && d.manager.running) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
-      {k:t('stat_blog_port')+' :13133', v:(d.ports && d.ports.blog) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
-      {k:t('stat_admin_port')+' :13134', v:(d.ports && d.ports.admin) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_hugo')+' · :13133', v:(d.hugo && d.hugo.running) && (d.ports && d.ports.blog) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
+      {k:t('stat_manager')+' · :13134', v:(d.manager && d.manager.running) && (d.ports && d.ports.admin) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
       {k:t('stat_posts'), v:(d.posts||0)},
       {k:t('stat_themes'), v:(d.themes||0)},
       {k:t('stat_version'), v:(d.hugo_version||'').split(' ')[0]||'-'},
