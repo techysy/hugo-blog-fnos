@@ -245,7 +245,7 @@ def build_api_doc(lang="zh"):
     # 文案 (中/英)
     T = {
         "title": "# Hugo Blog 管理面板 API 指南" if not en else "# Hugo Blog Admin API Guide",
-        "intro": "> 管理面板端口 **13134**。除 `/api/bootstrap` 外，所有接口需 `Authorization: Bearer <token>`。" if not en else "> Admin port **13134**. All endpoints except `/api/bootstrap` require `Authorization: Bearer <token>`.",
+        "intro": "> 管理面板端口 **13134**。所有接口需 `Authorization: Bearer <token>`；token 在管理面板「设置 → API → 查看/创建 token」获取。" if not en else "> Admin port **13134**. All endpoints require `Authorization: Bearer <token>`; get/create the token in the admin panel (Settings → API → View/Create Token).",
         "intro2": "> **解析 JSON 用 python3**（fnOS 及多数系统自带），无需 jq。" if not en else "> Parse JSON with **python3** (built-in on fnOS & most systems), no jq needed.",
         "s1": "## 1. 一键测试脚本 (推荐, 复制即用)" if not en else "## 1. One-shot test script (recommended)",
         "s1h": "保存为 `test-api.sh`，`chmod +x test-api.sh` 后运行：" if not en else "Save as `test-api.sh`, `chmod +x test-api.sh` and run:",
@@ -285,8 +285,9 @@ def build_api_doc(lang="zh"):
         "```bash",
         "#!/usr/bin/env bash", T["s1c"], "set -u",
         'BASE="' + base + '"',
-        'TOKEN=$(curl -s "$BASE/api/bootstrap" | python3 -c "import sys,json;print(json.load(sys.stdin).get(\'api_token\',\'\'))")',
-        'if [ -z "$TOKEN" ]; then echo "' + T["s1f"] + '"; exit 1; fi',
+        '# Token 在管理面板「设置 → API → 查看/创建 token」获取，填入下面或 export TOKEN=xxx',
+        'TOKEN="${TOKEN:-}"',
+        'if [ -z "$TOKEN" ]; then echo "请先 export TOKEN=<token>（管理面板设置→API查看）"; exit 1; fi',
         'AUTH="Authorization: Bearer $TOKEN"',
         'echo "Token: ${TOKEN:0:8}..."',
         'echo; echo "' + T["s1i"] + '"',
@@ -302,7 +303,8 @@ def build_api_doc(lang="zh"):
         T["s2"], "",
         T["t1"],
         "```bash",
-        'TOKEN=$(curl -s ' + base + '/api/bootstrap | python3 -c "import sys,json;print(json.load(sys.stdin).get(\'api_token\',\'\'))")',
+        '# Token 在管理面板「设置 → API → 查看/创建 token」获取',
+        'export TOKEN="<your-token>"',
         'AUTH="Authorization: Bearer $TOKEN"',
         "```", "",
         T["t2"],
@@ -877,6 +879,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 "themes": list_themes(),
                 "current": current_theme(),
             }))
+        elif path == "/api/token/view":
+            # 查看当前 API token (API 使用指南页「查看 token」, 需认证)
+            if not self._check_auth():
+                return
+            self._send(200, json.dumps({"token": API_TOKEN}))
         elif path == "/api/info":
             if not self._check_auth():
                 return
@@ -1291,9 +1298,11 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <div class="panel">
           <h2 data-i18n="api_title">🤖 API 使用指南</h2>
           <p class="hint" style="margin-bottom:10px" data-i18n="api_hint">以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。</p>
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
             <button class="btn secondary" onclick="copyApiDoc()" data-i18n="api_copy">📋 复制文档</button>
+            <button class="btn secondary" onclick="viewToken()" data-i18n="view_token">🔑 查看 token</button>
           </div>
+          <div class="hint" id="apiTokenMsg" style="margin-bottom:8px;display:none;word-break:break-all"></div>
           <div id="apiDoc" class="api-doc" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:14px;font-size:13px;line-height:1.7;max-height:70vh;overflow-y:auto"></div>
         </div>
       </div>
@@ -1315,7 +1324,7 @@ const I18N = {
     proxy_title:'⚙️ 代理设置', proxy_hint:'用于 Hugo 下载 module 主题依赖（docuapi 等）时走代理。留空表示直连。', proxy_addr_label:'代理地址 (HTTP/HTTPS 共用)', noproxy_label:'NO_PROXY', noproxy_optional:'(可选)', save_proxy:'保存代理设置', proxy_restart_hint:'保存后重启应用生效（下载 module 时使用）。',
     console_title:'📜 日志控制台', refresh:'🔄 刷新', download:'⬇️ 下载', current:'当前', log_src_hugo:'Hugo 日志', log_src_manager:'管理面板日志', console_hint:'日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。',
     sub_proxy:'⚙️ 代理', sub_api:'🤖 API', dash_title:'📊 服务状态',
-    api_title:'🤖 API 使用指南', api_hint:'以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。', api_copy:'📋 复制文档', api_copied:'✓ 已复制到剪贴板',
+    api_title:'🤖 API 使用指南', api_hint:'以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。', api_copy:'📋 复制文档', api_copied:'✓ 已复制到剪贴板', view_token:'🔑 查看 token',
     stat_hugo:'Hugo 服务', stat_manager:'管理面板', stat_blog_port:'博客端口', stat_admin_port:'管理端口', stat_version:'Hugo 版本', stat_posts:'文章', stat_themes:'主题', stat_cur_theme:'当前主题', stat_running:'运行中', stat_stopped:'已停止',
     rebuild_btn:'🔄 重建站点', rebuilding:'正在重建…', rebuild_done:'✓ 已重建', rebuild_fail:'重建失败:',
     token_btn:'🔑 创建 token', token_creating:'正在生成新 token…', token_done:'✓ 新 token (立即生效):', token_fail:'创建失败:',
@@ -1335,7 +1344,7 @@ const I18N = {
     proxy_title:'⚙️ Proxy Settings', proxy_hint:'Proxy used when Hugo downloads module theme deps (docuapi etc). Leave empty for direct.', proxy_addr_label:'Proxy address (shared HTTP/HTTPS)', noproxy_label:'NO_PROXY', noproxy_optional:'(optional)', save_proxy:'Save Proxy', proxy_restart_hint:'Takes effect after app restart (used when downloading modules).',
     console_title:'📜 Log Console', refresh:'🔄 Refresh', download:'⬇️ Download', current:'Current', log_src_hugo:'Hugo Log', log_src_manager:'Admin Log', console_hint:'Logs are archived by date. Current file keeps today only; history moves to data/logs/.',
     sub_proxy:'⚙️ Proxy', sub_api:'🤖 API', dash_title:'📊 Service Status',
-    api_title:'🤖 API Guide', api_hint:'Markdown doc of the admin REST API, copy-paste for an agent.', api_copy:'📋 Copy Doc', api_copied:'✓ Copied to clipboard',
+    api_title:'🤖 API Guide', api_hint:'Markdown doc of the admin REST API, copy-paste for an agent.', api_copy:'📋 Copy Doc', api_copied:'✓ Copied to clipboard', view_token:'🔑 View Token',
     stat_hugo:'Hugo Service', stat_manager:'Admin Panel', stat_blog_port:'Blog Port', stat_admin_port:'Admin Port', stat_version:'Hugo Version', stat_posts:'Posts', stat_themes:'Themes', stat_cur_theme:'Current Theme', stat_running:'Running', stat_stopped:'Stopped',
     rebuild_btn:'🔄 Rebuild', rebuilding:'Rebuilding…', rebuild_done:'✓ Rebuilt', rebuild_fail:'Rebuild failed:',
     token_btn:'🔑 Create Token', token_creating:'Generating new token…', token_done:'✓ New token (effective now):', token_fail:'Failed:',
@@ -1466,7 +1475,7 @@ async function loadStatus(){
       {k:t('stat_manager')+' · 13134', v:(d.manager && d.manager.running) && (d.ports && d.ports.admin) ? dot(true)+t('stat_running') : dot(false)+t('stat_stopped')},
       {k:t('stat_posts'), v:(d.posts||0)},
       {k:t('stat_themes'), v:(d.themes||0)},
-      {k:t('stat_version'), v:(d.hugo_version||'').split(' ')[0]||'-'},
+      {k:t('stat_version'), v:(d.hugo_version||'').match(/v[0-9]+\.[0-9]+\.[0-9]+/)?.[0]||'-'},
       {k:t('stat_cur_theme'), v:(d.current_theme||'-')},
     ];
     grid.innerHTML = cards.map(c=>'<div class="stat-card"><div class="k">'+c.k+'</div><div class="v">'+c.v+'</div></div>').join('');
@@ -1774,6 +1783,19 @@ function copyApiDoc(){
     ta.value = txt; document.body.appendChild(ta); ta.select();
     document.execCommand('copy'); document.body.removeChild(ta);
     alert(t('api_copied'));
+  }
+}
+// 查看当前 API token (API 使用指南页「查看 token」)
+async function viewToken(){
+  const el = document.getElementById('apiTokenMsg');
+  if(!el) return;
+  el.style.display = 'block';
+  try{
+    const r = await apiFetch('/api/token/view');
+    const d = await r.json();
+    el.textContent = '🔑 ' + t('view_token') + ': ' + (d.token || '-');
+  }catch(e){
+    el.textContent = t('token_fail') + ' ' + e;
   }
 }
 initToken();
