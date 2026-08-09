@@ -25,7 +25,7 @@ from pathlib import Path
 BLOG_DIR = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("/vol4/@appdata/hugo-blog/blog")
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 13134
 # 应用版本 (与 manifest 保持一致, 用于品牌区/仪表板显示)
-APP_VERSION = "0.1.4.7"
+APP_VERSION = "0.1.4.8"
 CONTENT_DIR = BLOG_DIR / "content"
 POST_DIR = CONTENT_DIR / "post"
 THEMES_DIR = BLOG_DIR / "themes"
@@ -34,6 +34,8 @@ CONFIG_FILE = CONFIG_DIR / "config.toml"
 DATA_DIR = BLOG_DIR.parent  # 数据目录 (@appdata/hugo-blog)
 TOKEN_FILE = DATA_DIR / "api_token"
 HUGO_BIN = os.environ.get("HUGO_BIN", "/vol4/@appcenter/hugo-blog/server/hugo")
+# cmd/main 启动脚本路径 (用于重建 hugo)
+CMD_MAIN = os.environ.get("CMD_MAIN", "/var/apps/hugo-blog/cmd/main")
 MODULE_CACHE = DATA_DIR / ".hugo_modules"
 PROXY_FILE = DATA_DIR / "proxy_config"
 
@@ -360,6 +362,21 @@ def build_api_doc():
         "- 未认证请求返回 `401 unauthorized`。",
     ]
     return "\n".join(lines)
+
+
+def rebuild_site():
+    """触发 hugo 重建 (调用 cmd/main rebuild, 仅重建 hugo 不动 manager)."""
+    try:
+        import subprocess
+        r = subprocess.run(
+            ["bash", str(CMD_MAIN), "rebuild"],
+            capture_output=True, text=True, timeout=60,
+        )
+        ok = r.returncode == 0
+        out = (r.stdout or "").strip().splitlines()
+        return ok, (out[-1] if out else ""), r.stderr or ""
+    except Exception as e:
+        return False, "", str(e)
 
 
 def get_proxy():
@@ -871,6 +888,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     self._send(400, json.dumps({"error": err}))
             except Exception as e:
                 self._send(500, json.dumps({"error": str(e)}))
+        elif path == "/api/rebuild":
+            # 触发 hugo 重建 (手动「重建」按钮)
+            ok, msg, err = rebuild_site()
+            if ok:
+                self._send(200, json.dumps({"ok": True, "msg": msg}))
+            else:
+                self._send(500, json.dumps({"error": err or msg or "重建失败"}))
         elif path == "/api/theme/upload":
             # 处理 multipart/form-data 文件上传 (手写解析, 零依赖)
             try:
@@ -1036,7 +1060,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
 <body data-theme="light">
 <div class="layout">
   <div class="sidebar" id="sidebar">
-    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.7</div></div>
+    <div class="brand">📝 Hugo Blog<div class="brand-ver" id="brandVer">v0.1.4.8</div></div>
     <div class="nav-item active" onclick="switchNav('dash')" data-i18n="nav_dash">📊 仪表板</div>
     <div class="nav-item" onclick="switchNav('write')" data-i18n="nav_write">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')" data-i18n="nav_posts">📄 文章列表</div>
@@ -1058,6 +1082,10 @@ th{color:var(--muted);font-weight:500;font-size:12px}
       <div class="panel">
         <h2 data-i18n="dash_title">📊 服务状态</h2>
         <div class="stat-grid" id="statGrid"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px;flex-wrap:wrap">
+          <button class="btn secondary" onclick="rebuildSite()" data-i18n="rebuild_btn">🔄 重建站点</button>
+          <span class="hint" id="rebuildMsg" style="margin:0"></span>
+        </div>
       </div>
       <div class="panel">
         <h2 data-i18n="console_title">📜 日志控制台</h2>
@@ -1172,6 +1200,7 @@ const I18N = {
     sub_proxy:'⚙️ 代理', sub_api:'🤖 API', dash_title:'📊 服务状态',
     api_title:'🤖 API 使用指南', api_hint:'以下为管理面板 REST API 的 Markdown 文档，可直接复制给 agent 使用。', api_copy:'📋 复制文档', api_copied:'✓ 已复制到剪贴板',
     stat_hugo:'Hugo 服务', stat_manager:'管理面板', stat_blog_port:'博客端口', stat_admin_port:'管理端口', stat_version:'Hugo 版本', stat_posts:'文章', stat_themes:'主题', stat_cur_theme:'当前主题', stat_running:'运行中', stat_stopped:'已停止',
+    rebuild_btn:'🔄 重建站点', rebuilding:'正在重建…', rebuild_done:'✓ 已重建', rebuild_fail:'重建失败:',
     saving:'保存中…', saved:'✓ 已保存:', rendering:'(Hugo 自动渲染中)', save_fail:'保存失败', deleting:'删除中…', deleted:'✓ 已删除主题:', delete_fail:'删除失败', del_confirm:'确定删除主题「{name}」吗？',
     switching:'切换中…', switched:'✓ 已切换到主题:', switch_fail:'切换失败', uploading:'上传中…', uploaded:'✓ 主题已上传:', upload_fail:'上传失败', pls_zip:'请选择 zip 文件', no_theme:'请输入 git 地址或 module 路径', installing:'安装中… (可能需要一些时间)', installed:'✓ 主题已安装:', deps:'依赖', install_fail:'安装失败', invalid_install:'无法识别：请输入 git 仓库地址 或 Hugo module 路径',
     proxy_saved:'✓ 代理设置已保存（重启应用生效）', proxy_save_fail:'保存失败', loading_log:'加载中…', load_log_fail:'加载日志失败:', log_read_fail:'读取失败', no_log:'无日志内容', no_log_data:'(暂无日志)', load_list_fail:'加载日志列表失败:', log_fmt:'{src} 日志 · {disp} · 共 {total} 行',
@@ -1189,6 +1218,7 @@ const I18N = {
     sub_proxy:'⚙️ Proxy', sub_api:'🤖 API', dash_title:'📊 Service Status',
     api_title:'🤖 API Guide', api_hint:'Markdown doc of the admin REST API, copy-paste for an agent.', api_copy:'📋 Copy Doc', api_copied:'✓ Copied to clipboard',
     stat_hugo:'Hugo Service', stat_manager:'Admin Panel', stat_blog_port:'Blog Port', stat_admin_port:'Admin Port', stat_version:'Hugo Version', stat_posts:'Posts', stat_themes:'Themes', stat_cur_theme:'Current Theme', stat_running:'Running', stat_stopped:'Stopped',
+    rebuild_btn:'🔄 Rebuild', rebuilding:'Rebuilding…', rebuild_done:'✓ Rebuilt', rebuild_fail:'Rebuild failed:',
     saving:'Saving…', saved:'✓ Saved:', rendering:'(Hugo re-rendering)', save_fail:'Save failed', deleting:'Deleting…', deleted:'✓ Deleted theme:', delete_fail:'Delete failed', del_confirm:'Delete theme "{name}"?',
     switching:'Switching…', switched:'✓ Switched to:', switch_fail:'Switch failed', uploading:'Uploading…', uploaded:'✓ Uploaded:', upload_fail:'Upload failed', pls_zip:'Select a zip file', no_theme:'Enter git URL or module path', installing:'Installing… (may take a while)', installed:'✓ Installed:', deps:'deps', install_fail:'Install failed', invalid_install:'Unrecognized: enter a git repo URL or a Hugo module path',
     proxy_saved:'✓ Proxy saved (takes effect after restart)', proxy_save_fail:'Save failed', loading_log:'Loading…', load_log_fail:'Failed to load log:', log_read_fail:'Read failed', no_log:'No log content', no_log_data:'(no log)', load_list_fail:'Failed to load log list:', log_fmt:'{src} log · {disp} · {total} lines',
@@ -1321,6 +1351,23 @@ async function loadStatus(){
     grid.innerHTML = cards.map(c=>'<div class="stat-card"><div class="k">'+c.k+'</div><div class="v">'+c.v+'</div></div>').join('');
   }catch(e){
     grid.innerHTML = '<div class="hint">'+t('load_log_fail')+' '+e+'</div>';
+  }
+}
+// 手动重建站点 (仪表盘「重建」按钮)
+async function rebuildSite(){
+  const msg = document.getElementById('rebuildMsg');
+  if(msg) msg.textContent = t('rebuilding');
+  try{
+    const r = await apiFetch('/api/rebuild', {method:'POST'});
+    const d = await r.json();
+    if(d.ok){
+      if(msg) msg.textContent = t('rebuild_done');
+      setTimeout(()=>{ loadStatus(); loadLogDates(); }, 1500); // 重建后刷新状态
+    } else {
+      if(msg) msg.textContent = t('rebuild_fail') + ' ' + (d.error||'');
+    }
+  }catch(e){
+    if(msg) msg.textContent = t('rebuild_fail') + ' ' + e;
   }
 }
 // 汉堡菜单 (移动端)

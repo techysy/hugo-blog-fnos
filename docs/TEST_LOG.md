@@ -4,6 +4,24 @@
 
 ---
 
+## 0.1.4.8 (2026-08-09)
+
+> 仪表盘「重建站点」按钮（基于 0.1.4.7 追加）。
+
+### 更新点
+- **🔄 重建站点按钮** — 仪表盘服务状态区新增「重建站点」按钮，手动触发 hugo 重建（解决 watch 不自动重建的问题）
+- 后端：`cmd/main` 新增 `rebuild` 命令（仅重建 hugo，不动 manager）；manager.py 新增 `/api/rebuild` 接口
+- 前端：`rebuildSite()` 调用接口，重建后自动刷新服务状态与日志
+
+### 验证状态
+- [x] `/api/rebuild` 接口（成功返回 ok + msg，未认证 401）
+- [x] 前端重建按钮 + rebuildSite 函数
+- [x] fpk 内 cmd/main 含 rebuild（已解包验证）
+- [x] JS/Python/bash 语法（node --check / py_compile / bash -n）
+- [ ] App Center 升级到 0.1.4.8 后最终回归 — **待办**
+
+---
+
 ## 0.1.4.7 (2026-08-09)
 
 > 品牌区版本号（基于 0.1.4.6 追加）。

@@ -189,5 +189,12 @@ case "${1:-start}" in
     stop) stop ;;
     status) status ;;
     restart) stop; sleep 1; start ;;
-    *) echo "Usage: $0 {start|stop|status|restart}"; exit 1 ;;
+    rebuild)
+        # 仅重建 hugo (不动 manager), 供管理面板「重建」按钮调用
+        pkill -f "hugo server.*${BLOG_DIR}" 2>/dev/null || true
+        sleep 2
+        rm -f "${PID_FILE}"
+        start
+        ;;
+    *) echo "Usage: $0 {start|stop|status|restart|rebuild}"; exit 1 ;;
 esac
