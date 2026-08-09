@@ -1,0 +1,26 @@
+# Hugo Blog 测试记录
+
+> 发版规则：本地验证 OK 后再发正式包；测试包用 `当前版本.第四位累加`（如 0.1.3.1）；测试记录更新点/问题点，正式发布时聚合到 CHANGELOG。
+
+---
+
+## 0.1.3.1 (2026-08-09)
+
+### 更新点
+- **强制使用 `@appshare` 数据目录** — cmd/main 忽略 fnOS 注入的 `TRIM_PKGVAR`（指向 @appdata），固定用 `/vol4/@appshare/hugo-blog/`
+- 历史文章迁移到 `@appshare/hugo-blog/blog/content/post/`（35 篇）
+- Web 管理面板（写文章 / 主题管理：上传 + 切换）
+
+### 问题点（已解决）
+1. **"应用包不符合系统要求"** — 根因：`service_port` 太低（1313）；`desktop_applaunchname` 连字符缺失；`config/resource` JSON 格式。已修复。
+2. **文章不显示** — 根因：fnOS 注入 `TRIM_PKGVAR=/vol4/@appdata` 覆盖了 @appshare 默认值。已修复（cmd/main 强制 @appshare）。
+3. **"本地应用启动失败"** — 根因：`.hugo_build.lock` 属主是 `yangyu`（SSH 渲染测试残留），hugo-blog 用户无法写。已修复（删除 lock + 统一属主）。
+
+### 验证状态
+- [x] hugo 用 @appshare 正常启动，博客显示 35 篇文章
+- [x] 主题上传/切换正常
+- [x] 写文章正常（管理面板）
+
+### 待验证
+- [ ] App Center 启用后能正常启动（需用户确认）
+- [ ] 正式发布前最终回归
