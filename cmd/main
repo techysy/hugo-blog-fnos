@@ -62,6 +62,21 @@ export GONOSUMDB="*"
 export GONOSUMCHECK=1
 export GOFLAGS="-mod=mod"
 
+# Dart Sass: 支持 SCSS 主题 (anatole/docuapi 等). 打包的 dart-sass 在 server/dart-sass/.
+# hugo 编译 SCSS 需要 dart-sass/sass 在 PATH 中。sass 脚本会调 src/dart-sass 二进制。
+DART_SASS_DIR=""
+for c in "${SRC_DIR}/dart-sass" "/vol4/@appcenter/hugo-blog/server/dart-sass"; do
+    if [ -x "${c}/sass" ]; then
+        DART_SASS_DIR="${c}"
+        break
+    fi
+done
+if [ -n "${DART_SASS_DIR}" ]; then
+    export PATH="${DART_SASS_DIR}:${PATH}"
+    export PATH="${DART_SASS_DIR}/src:${PATH}"
+    echo "  dart-sass: ${DART_SASS_DIR}" >> "${DIAG}" 2>&1
+fi
+
 # 应用代理配置 (控制面板可设置, 存 DATA_DIR/proxy_config)
 if [ -f "${DATA_DIR}/proxy_config" ]; then
     _http=$(grep "^http=" "${DATA_DIR}/proxy_config" | head -1 | cut -d= -f2-)

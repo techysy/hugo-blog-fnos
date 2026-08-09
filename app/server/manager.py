@@ -35,6 +35,132 @@ HUGO_BIN = os.environ.get("HUGO_BIN", "/vol4/@appcenter/hugo-blog/server/hugo")
 MODULE_CACHE = DATA_DIR / ".hugo_modules"
 PROXY_FILE = DATA_DIR / "proxy_config"
 
+# ---------- 日志 (控制台) ----------
+# 日志来源: 名称 -> 文件名 (在 DATA_DIR 下)
+LOG_SOURCES = {
+    "hugo": DATA_DIR / "hugo.log",
+    "manager": DATA_DIR / "manager.log",
+}
+# 归档目录: 按日期归档的日志存这里
+LOG_ARCHIVE_DIR = DATA_DIR / "logs"
+LOG_EXT = ".log"
+
+
+def _archive_date():
+    """当前日期 YYYYMMDD 和展示用 YYYY-MM-DD."""
+    now = datetime.now()
+    return now.strftime("%Y%m%d"), now.strftime("%Y-%m-%d")
+
+
+def archive_logs():
+    """启动时归档: 把非当天的日志文件滚到 LOG_ARCHIVE_DIR/hugo.log.YYYYMMDD.
+
+    规则: 当前日志文件若修改日期不是今天, 则归档 (移动) 到归档目录,
+    并清空当前文件, 让新日志只记录当天. 避免单文件无限增长.
+    """
+    today_compact, _ = _archive_date()
+    for name, path in LOG_SOURCES.items():
+        try:
+            if not path.exists():
+                continue
+            mtime = datetime.fromtimestamp(path.stat().st_mtime)
+            mday = mtime.strftime("%Y%m%d")
+            # 只有修改日期不是今天才归档 (保留当天日志在工作文件, 供 tail)
+            if mday == today_compact:
+                continue
+            LOG_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+            dest = LOG_ARCHIVE_DIR / f"{name}.log.{mday}"
+            # 追加合并 (避免覆盖同名归档)
+            content = b""
+            try:
+                content = path.read_bytes()
+            except OSError:
+                content = b""
+            if dest.exists():
+                with dest.open("ab") as f:
+                    f.write(content)
+            else:
+                dest.write_bytes(content)
+            # 清空当前日志文件 (保留当天从零开始)
+            path.write_bytes(b"")
+        except OSError:
+            continue
+
+
+def list_log_dates(name):
+    """返回某日志来源可用的日期列表 (含归档 + 当前). 倒序."""
+    dates = []
+    base = LOG_SOURCES.get(name)
+    if not base:
+        return dates
+    # 归档文件: logs/hugo.log.YYYYMMDD
+    try:
+        if LOG_ARCHIVE_DIR.exists():
+            for f in LOG_ARCHIVE_DIR.glob(f"{name}.log.[0-9]*"):
+                m = re.search(rf"{name}\.log\.(\d{{8}})$", f.name)
+                if m:
+                    d = m.group(1)
+                    dates.append((d, _fmt_date(d)))
+    except OSError:
+        pass
+    # 当前工作文件 (仅当非空)
+    try:
+        if base.exists() and base.stat().st_size > 0:
+            dates.append(_archive_date())
+    except OSError:
+        pass
+    # 去重 + 按日期倒序
+    seen = set()
+    result = []
+    for compact, disp in sorted(dates, key=lambda x: x[0], reverse=True):
+        if compact not in seen:
+            seen.add(compact)
+            result.append({"date": compact, "display": disp})
+    return result
+
+
+def _fmt_date(compact):
+    """YYYYMMDD -> YYYY-MM-DD."""
+    if len(compact) == 8:
+        return f"{compact[:4]}-{compact[4:6]}-{compact[6:]}"
+    return compact
+
+
+def read_logs(name, date=None, tail=500):
+    """读取日志内容. name: hugo/manager. date: YYYYMMDD 或 None(当前). tail: 返回最后 N 行.
+
+    返回 dict: {source, date, display, total, content}
+    """
+    base = LOG_SOURCES.get(name)
+    if not base:
+        return None
+    target = base
+    display = "当前"
+    if date:
+        compact = date.replace("-", "")
+        target = LOG_ARCHIVE_DIR / f"{name}.log.{compact}"
+        display = _fmt_date(compact)
+        if not target.exists():
+            return {"source": name, "date": date, "display": display, "total": 0, "content": ""}
+    try:
+        if not target.exists():
+            return {"source": name, "date": date, "display": display, "total": 0, "content": ""}
+        raw = target.read_text(encoding="utf-8", errors="replace")
+        lines = raw.splitlines()
+        if tail and tail > 0 and len(lines) > tail:
+            lines = lines[-tail:]
+        content = "\n".join(lines)
+        return {
+            "source": name,
+            "date": date or "current",
+            "display": display,
+            "total": len(raw.splitlines()),
+            "content": content,
+        }
+    except OSError as e:
+        return {"source": name, "date": date, "display": display, "total": 0,
+                "content": f"读取日志失败: {e}"}
+
 
 def get_proxy():
     """读取代理配置. 返回 {http, https, no_proxy}"""
@@ -444,6 +570,54 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not self._check_auth():
                 return
             self._send(200, json.dumps(get_proxy()))
+        elif path == "/api/logs/list":
+            if not self._check_auth():
+                return
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            name = (q.get("source") or ["hugo"])[0]
+            if name not in LOG_SOURCES:
+                name = "hugo"
+            self._send(200, json.dumps({
+                "sources": list(LOG_SOURCES.keys()),
+                "dates": list_log_dates(name),
+                "current": _archive_date()[0],
+            }))
+        elif path == "/api/logs":
+            if not self._check_auth():
+                return
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            name = (q.get("source") or ["hugo"])[0]
+            if name not in LOG_SOURCES:
+                name = "hugo"
+            date = (q.get("date") or [None])[0]
+            tail = int((q.get("tail") or ["500"])[0])
+            result = read_logs(name, date, tail)
+            if result is None:
+                self._send(404, json.dumps({"error": "未知日志来源"}))
+            else:
+                self._send(200, json.dumps(result))
+        elif path == "/api/logs/download":
+            if not self._check_auth():
+                return
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            name = (q.get("source") or ["hugo"])[0]
+            if name not in LOG_SOURCES:
+                name = "hugo"
+            date = (q.get("date") or [None])[0]
+            result = read_logs(name, date, 0)
+            if result is None:
+                self._send(404, json.dumps({"error": "未知日志来源"}))
+                return
+            fname = f"{name}.log"
+            if date:
+                fname = f"{name}.log.{date.replace('-', '')}"
+            body = result.get("content", "").encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
         else:
             self._send(404, json.dumps({"error": "not found"}))
 
@@ -618,6 +792,7 @@ th{color:var(--muted);font-weight:500;font-size:12px}
     <div class="nav-item active" onclick="switchNav('write')">✍️ 写文章</div>
     <div class="nav-item" onclick="switchNav('posts')">📄 文章列表</div>
     <div class="nav-item" onclick="switchNav('theme')">🎨 主题</div>
+    <div class="nav-item" onclick="switchNav('console')">📜 控制台</div>
     <div class="nav-item" onclick="switchNav('settings')">⚙️ 设置</div>
   </div>
   <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
@@ -676,6 +851,25 @@ th{color:var(--muted);font-weight:500;font-size:12px}
         <div class="hint">zip 上传 / git 克隆 / module 安装效果相同；git 安装后自动检测依赖（module/sass）。</div>
         <div class="hint">用于 Hugo Module 依赖的主题（需联网下载）。module 安装后会在列表出现并可切换。</div>
         <div class="hint">上传的主题 zip 需包含一个主题目录（含 theme.toml 或 layouts）。</div>
+      </div>
+    </div>
+    <div class="tab-panel" id="tab-console">
+      <div class="panel">
+        <h2>📜 日志控制台</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <select id="logSource" onchange="loadLogDates()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
+            <option value="hugo">Hugo 日志</option>
+            <option value="manager">管理面板日志</option>
+          </select>
+          <select id="logDate" onchange="loadLogs()" style="width:auto;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card2);color:var(--text);font-size:13px">
+            <option value="">当前</option>
+          </select>
+          <button class="btn secondary" onclick="loadLogs()">🔄 刷新</button>
+          <button class="btn secondary" onclick="downloadLog()">⬇️ 下载</button>
+        </div>
+        <div class="hint" id="logInfo" style="margin-bottom:8px"></div>
+        <pre id="logView" style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap;word-break:break-all;max-height:70vh;overflow-y:auto;line-height:1.5"></pre>
+        <div class="hint" style="margin-top:8px">日志按日期归档，可查看历史日期。当前日志仅保留当天，历史自动归档到 data/logs/ 目录。</div>
       </div>
     </div>
     <div class="tab-panel" id="tab-settings">
@@ -755,6 +949,7 @@ function switchNav(tab){
   if(tab === 'posts') loadPosts();
   if(tab === 'theme') loadThemes();
   if(tab === 'settings') loadProxy();
+  if(tab === 'console') loadLogDates();
   toggleSidebar(false); // 切导航后关闭移动端侧边栏
 }
 // 汉堡菜单 (移动端)
@@ -912,6 +1107,56 @@ async function saveProxy(){
     msg.textContent = '✗ ' + (d.error||'保存失败');
   }
 }
+// ---------- 日志控制台 ----------
+let logSources = ['hugo'];
+let logDates = [];
+async function loadLogDates(){
+  const source = document.getElementById('logSource').value || 'hugo';
+  try{
+    const r = await apiFetch('/api/logs/list?source=' + encodeURIComponent(source));
+    const d = await r.json();
+    if(d.sources) logSources = d.sources;
+    logDates = d.dates || [];
+    const dateSel = document.getElementById('logDate');
+    const prev = dateSel.value;
+    dateSel.innerHTML = '<option value="">当前</option>' + logDates.map(x=>
+      `<option value="${x.date}" ${x.date===prev?'selected':''}>${x.display}</option>`
+    ).join('');
+    // 若之前选中了某个历史日期, 保持; 否则加载当前
+    if(prev && logDates.some(x=>x.date===prev)){
+      dateSel.value = prev;
+    }
+    loadLogs();
+  }catch(e){ document.getElementById('logView').textContent = '加载日志列表失败: ' + e; }
+}
+async function loadLogs(){
+  const source = document.getElementById('logSource').value || 'hugo';
+  const date = document.getElementById('logDate').value || '';
+  const view = document.getElementById('logView');
+  const info = document.getElementById('logInfo');
+  view.textContent = '加载中…';
+  try{
+    const q = 'source=' + encodeURIComponent(source) + '&tail=2000' + (date ? '&date=' + encodeURIComponent(date) : '');
+    const r = await apiFetch('/api/logs?' + q);
+    const d = await r.json();
+    if(d.content === undefined){
+      info.textContent = '读取失败';
+      view.textContent = '无日志内容';
+      return;
+    }
+    info.textContent = `${source.toUpperCase()} 日志 · ${d.display} · 共 ${d.total} 行${date?'':' (显示最近 2000 行)'}`;
+    view.textContent = d.content || '(暂无日志)';
+    view.scrollTop = view.scrollHeight;
+  }catch(e){
+    view.textContent = '加载日志失败: ' + e;
+  }
+}
+function downloadLog(){
+  const source = document.getElementById('logSource').value || 'hugo';
+  const date = document.getElementById('logDate').value || '';
+  const q = 'source=' + encodeURIComponent(source) + (date ? '&date=' + encodeURIComponent(date) : '');
+  window.open('/api/logs/download?' + q, '_blank');
+}
 initToken();
 </script>
 </body>
@@ -921,6 +1166,7 @@ initToken();
 
 if __name__ == "__main__":
     os.makedirs(POST_DIR, exist_ok=True)
+    archive_logs()  # 启动时归档非当天的日志 (控制台按日期归档)
     socketserver.ThreadingTCPServer.allow_reuse_address = True
     httpd = socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler)
     print(f"Hugo Blog manager on port {PORT}, blog_dir={BLOG_DIR}")

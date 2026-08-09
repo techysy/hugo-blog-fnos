@@ -1,7 +1,7 @@
 appname               = hugo-blog
-version               = 0.1.4
+version               = 0.1.4.1
 display_name          = Hugo Blog
-desc                  = Hugo 静态博客 — 常驻渲染服务，写文章自动生成站点
+desc                  = Hugo 静态博客 — 常驻渲染服务，写文章自动生成站点。博客: http://<NAS-IP>:13133；管理面板: http://<NAS-IP>:13134
 arch                  = x86_64
 source                = thirdparty
 maintainer            = techysy

@@ -4,13 +4,37 @@
 
 ---
 
+## 0.1.4.1 (2026-08-09)
+
+> 基于 v0.1.4 聚合 + 本次新增三功能（测试版）。
+
+### 更新点
+- **📜 管理面板控制台（日志）**：
+  - 新增 `/api/logs`、`/api/logs/list`、`/api/logs/download` 接口（带认证）
+  - 显示 `hugo.log` + `manager.log` 两个来源，支持日期筛选 / 刷新 / 下载
+  - **按日期归档**：启动时把非当天日志滚到 `data/logs/hugo.log.YYYYMMDD`，当前文件只留当天，避免单文件无限增长
+- **🎨 Dart Sass 支持（SCSS 主题）**：
+  - 打包 dart-sass 到 `server/dart-sass/`，`cmd/main` 启动时加入 PATH
+  - 解决 `anatole`/`docuapi` 等 SCSS 主题 `TOCSS-DART` 启动失败问题
+- **🔌 应用介绍明确端口**：manifest `desc` + README 写明博客 `13133` / 管理面板 `13134`
+
+### 问题点（已解决）
+- **SCSS 主题无法启用** — 根因：hugo server 需外部 dart-sass 编译 SCSS，系统未装 → `TOCSS-DART` 报错 → 应用启动失败。修复：打包 dart-sass 进应用并加入 PATH。
+
+### 验证状态
+- [x] 控制台 API（本地 + NAS 测试环境）— 日志读取/归档/下载/认证全部通过
+- [x] Dart Sass + anatole-master（SCSS）主题 — hugo server HTTP 200
+- [x] cmd/main dart-sass PATH 检测
+- [ ] App Center 升级到 0.1.4.1 后最终回归 — **待办**
+
+---
+
 ## 📦 正式版聚合 (v0.1.4) — 2026-08-09
 
-0.1.3.1~0.1.3.10 测试阶段的全部改动已**聚合到 CHANGELOG v0.1.4**，manifest 版本升为 `0.1.4`。
+0.1.3.1~0.1.3.10 测试阶段的全部改动已**聚合到 CHANGELOG v0.1.4**，manifest 版本先升为 `0.1.4`，后续追加 0.1.4.1 功能后当前版本为 `0.1.4.1`（测试版）。
 
 - [x] CHANGELOG 聚合 v0.1.4（新增/变更/修复三分类）
-- [x] manifest `version = 0.1.4`
-- [ ] 打包正式 fpk（url + iframe 双版）— **待办**
+- [ ] 打包正式 fpk（url + iframe 双版）— 因 0.1.4.1 追加功能，待功能稳定后再发正式 v0.1.4
 - [ ] git 打标签 `v0.1.4` + 建 GitHub Release — **待办**
 
 ---
