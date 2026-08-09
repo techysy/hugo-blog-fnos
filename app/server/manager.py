@@ -1387,70 +1387,77 @@ function downloadLog(){
 function buildApiDoc(){
   const host = location.hostname;
   const base = 'http://' + host + ':13134';
-  const lines = [
-    '# Hugo Blog 管理面板 API 指南',
-    '',
-    '> 管理面板端口 **13134**。除 `/api/bootstrap` 外，所有接口需 `Authorization: Bearer <token>`。',
-    '> 先 `GET /api/bootstrap` 获取 token。',
-    '',
-    '## 1. 获取 API Token',
-    '```bash',
-    'TOKEN=$(curl -s ' + base + '/api/bootstrap | jq -r ".api_token")',
-    'AUTH="Authorization: Bearer $TOKEN"',
-    '```',
-    '',
-    '## 2. 服务状态',
-    '```bash',
-    'curl -s -H "$AUTH" ' + base + '/api/info | jq',
-    '# 返回: hugo/manager 进程、端口、hugo 版本、文章/主题数、当前主题',
-    '```',
-    '',
-    '## 3. 文章',
-    '```bash',
-    '# 列表',
-    'curl -s -H "$AUTH" ' + base + '/api/posts | jq ".posts"',
-    '# 新建文章',
-    'curl -s -X POST ' + base + '/api/new -H "$AUTH" -H "Content-Type: application/json" \\',
-    '  -d \'{"title":"新文章","tags":"hugo,fnos","content":"# 正文\\n内容..."}\' | jq',
-    '```',
-    '',
-    '## 4. 主题',
-    '```bash',
-    '# 列表 + 当前主题',
-    'curl -s -H "$AUTH" ' + base + '/api/themes | jq',
-    '# 切换主题',
-    'curl -s -X POST ' + base + '/api/theme/switch -H "$AUTH" -H "Content-Type: application/json" -d \'{"theme":"minimal"}\' | jq',
-    '# 在线安装 (git URL 或 module 路径, 自动识别)',
-    'curl -s -X POST ' + base + '/api/theme/git -H "$AUTH" -H "Content-Type: application/json" -d \'{"url":"https://github.com/user/theme.git"}\' | jq',
-    'curl -s -X POST ' + base + '/api/theme/module -H "$AUTH" -H "Content-Type: application/json" -d \'{"module":"github.com/bep/docuapi"}\' | jq',
-    '# 删除主题 (不能删除使用中)',
-    'curl -s -X POST ' + base + '/api/theme/delete -H "$AUTH" -H "Content-Type: application/json" -d \'{"theme":"old-theme"}\' | jq',
-    '```',
-    '',
-    '## 5. 日志 (控制台)',
-    '```bash',
-    '# 日志来源列表 + 可用日期',
-    'curl -s -H "$AUTH" "' + base + '/api/logs/list?source=hugo" | jq',
-    '# 读取日志 (source=hugo|manager, 可选 date=YYYYMMDD, tail=N)',
-    'curl -s -H "$AUTH" "' + base + '/api/logs?source=hugo&tail=200" | jq',
-    '# 下载日志',
-    'curl -s -H "$AUTH" -o hugo.log "' + base + '/api/logs/download?source=hugo"',
-    '```',
-    '',
-    '## 6. 代理设置',
-    '```bash',
-    '# 读取',
-    'curl -s -H "$AUTH" ' + base + '/api/proxy | jq',
-    '# 设置 (HTTP/HTTPS 共用同一地址)',
-    'curl -s -X POST ' + base + '/api/proxy -H "$AUTH" -H "Content-Type: application/json" \\',
-    '  -d \'{"http":"http://192.168.31.31:7890","https":"http://192.168.31.31:7890","no_proxy":"localhost,127.0.0.1"}\' | jq',
-    '```',
-    '',
-    '## 认证说明',
-    '- token 存于数据目录 `api_token`，删除后重启应用会重新生成。',
-    '- 未认证请求返回 `401 unauthorized`。',
-  ];
-  return lines.join('\n');
+  const T = [];
+  T.push(`# Hugo Blog 管理面板 API 指南`);
+  T.push(``);
+  T.push(`> 管理面板端口 **13134**。除 /api/bootstrap 外，所有接口需 Authorization: Bearer <token>。`);
+  T.push(`> 先 GET /api/bootstrap 获取 token。`);
+  T.push(``);
+  T.push(`## 1. 获取 API Token`);
+  T.push(`\`\`\`bash`);
+  T.push(`TOKEN=$(curl -s ${base}/api/bootstrap | jq -r ".api_token")`);
+  T.push(`AUTH="Authorization: Bearer $TOKEN"`);
+  T.push(`\`\`\``);
+  T.push(``);
+  T.push(`## 2. 服务状态`);
+  T.push(`\`\`\`bash`);
+  T.push(`curl -s -H "$AUTH" ${base}/api/info | jq`);
+  T.push(`\`\`\``);
+  T.push(``);
+  T.push(`## 3. 文章`);
+  T.push(`\`\`\`bash`);
+  T.push(`curl -s -H "$AUTH" ${base}/api/posts | jq ".posts"`);
+  T.push(`# 新建文章 (JSON 用文件, 见下方 post.json 示例)`);
+  T.push(`curl -s -X POST ${base}/api/new -H "$AUTH" -H "Content-Type: application/json" -d @post.json | jq`);
+  T.push(`\`\`\``);
+  T.push(``);
+  T.push(`## 4. 主题`);
+  T.push(`\`\`\`bash`);
+  T.push(`curl -s -H "$AUTH" ${base}/api/themes | jq`);
+  T.push(`# 切换主题 (JSON 用文件, 见下方 theme.json 示例)`);
+  T.push(`curl -s -X POST ${base}/api/theme/switch -H "$AUTH" -H "Content-Type: application/json" -d @theme.json | jq`);
+  T.push(`# 在线安装: git 仓库`);
+  T.push(`curl -s -X POST ${base}/api/theme/git -H "$AUTH" -H "Content-Type: application/json" -d '{"url":"https://github.com/user/theme.git"}' | jq`);
+  T.push(`# 在线安装: Hugo Module`);
+  T.push(`curl -s -X POST ${base}/api/theme/module -H "$AUTH" -H "Content-Type: application/json" -d '{"module":"github.com/bep/docuapi"}' | jq`);
+  T.push(`# 删除主题`);
+  T.push(`curl -s -X POST ${base}/api/theme/delete -H "$AUTH" -H "Content-Type: application/json" -d '{"theme":"old-theme"}' | jq`);
+  T.push(`\`\`\``);
+  T.push(``);
+  T.push(`## 5. 日志 (控制台)`);
+  T.push(`\`\`\`bash`);
+  T.push(`curl -s -H "$AUTH" "${base}/api/logs/list?source=hugo" | jq`);
+  T.push(`curl -s -H "$AUTH" "${base}/api/logs?source=hugo&tail=200" | jq`);
+  T.push(`curl -s -H "$AUTH" -o hugo.log "${base}/api/logs/download?source=hugo"`);
+  T.push(`\`\`\``);
+  T.push(``);
+  T.push(`## 6. 代理设置`);
+  T.push(`\`\`\`bash`);
+  T.push(`curl -s -H "$AUTH" ${base}/api/proxy | jq`);
+  T.push(`# 设置代理 (HTTP/HTTPS 共用同一地址)`);
+  T.push(`curl -s -X POST ${base}/api/proxy -H "$AUTH" -H "Content-Type: application/json" -d '{"http":"http://192.168.31.31:7890","https":"http://192.168.31.31:7890","no_proxy":"localhost,127.0.0.1"}' | jq`);
+  T.push(`\`\`\``);
+  T.push(``);
+  T.push(`## 认证说明`);
+  T.push(`- token 存于数据目录 api_token，删除后重启应用会重新生成。`);
+  T.push(`- 未认证请求返回 401 unauthorized。`);
+  T.push(``);
+  T.push(`### 新建文章 post.json 示例`);
+  T.push(`\`\`\`json`);
+  T.push(`{`);
+  T.push(`  "title": "新文章",`);
+  T.push(`  "tags": "hugo, fnos",`);
+  T.push(`  "content": "# 标题"`);
+  T.push(`}`);
+  T.push(`\`\`\``);
+  T.push(``);
+  T.push(`### 切换主题 theme.json 示例`);
+  T.push(`\`\`\`json`);
+  T.push(`{`);
+  T.push(`  "theme": "minimal"`);
+  T.push(`}`);
+  T.push(`\`\`\``);
+  return T.join("\\n");
 }
 function loadApiDoc(){
   const el = document.getElementById('apiDoc');
