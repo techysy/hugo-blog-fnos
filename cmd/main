@@ -3,9 +3,26 @@ set -uo pipefail
 
 APP_NAME="${TRIM_APPNAME:-hugo-blog}"
 APP_DIR="${TRIM_APPDEST:-/var/apps/${APP_NAME}}"
-# 数据目录用 fnOS 注入的 TRIM_PKGVAR (天然 = /vol4/@appdata/<app>, app 私有)。
+# 数据目录用 fnOS 注入的 TRIM_PKGVAR (天然 = /volX/@appdata/<app>, app 私有)。
 # 文章/博客源放 app 私有目录，通过管理面板 API 管理，不暴露在公开 share。
-DATA_DIR="${TRIM_PKGVAR:-/vol4/@appdata/${APP_NAME}}"
+# 兜底: 空壳/无 TRIM_PKGVAR 时从 fnOS home 软链 (/volX/@apphome/<app>) 推导卷, 不写死 /vol4.
+APP_VOL=""
+if [ -n "${TRIM_PKGVAR:-}" ]; then
+    DATA_DIR="${TRIM_PKGVAR}"
+else
+    if [ -L "${APP_DIR}/home" ]; then
+        APP_HOME="$(readlink -f "${APP_DIR}/home")"
+        APP_VOL="$(printf '%s' "${APP_HOME}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+    fi
+    if [ -z "${APP_VOL}" ]; then
+        APP_VOL="$(printf '%s' "${APP_DIR}" | sed -n 's#^\(/vol[^/]*\)/.*#\1#p')"
+    fi
+    if [ -n "${APP_VOL}" ]; then
+        DATA_DIR="${APP_VOL}/@appdata/${APP_NAME}"
+    else
+        DATA_DIR="${APP_DIR}/var"
+    fi
+fi
 PORT="${TRIM_SERVICE_PORT:-13133}"
 MGMT_PORT=13134
 LOG="${DATA_DIR}/hugo.log"
@@ -45,7 +62,7 @@ fi
 # Hugo Modules 环境: 支持 module 依赖主题 (如 docuapi)
 # 依赖飞牛官方 go 依赖 (manifest install_dep_apps=go-1.26)
 GO_DIR=""
-for c in "/vol4/@appcenter/go-1.26" "/var/apps/go-1.26"; do
+for c in "${APP_VOL}/@appcenter/go-1.26" "/var/apps/go-1.26"; do
     if [ -x "${c}/bin/go" ]; then
         GO_DIR="${c}"
         break
@@ -65,7 +82,7 @@ export GOFLAGS="-mod=mod"
 # Dart Sass: 支持 SCSS 主题 (anatole/docuapi 等). 打包的 dart-sass 在 server/dart-sass/.
 # hugo 编译 SCSS 需要 dart-sass/sass 在 PATH 中。sass 脚本会调 src/dart-sass 二进制。
 DART_SASS_DIR=""
-for c in "${SRC_DIR}/dart-sass" "/vol4/@appcenter/hugo-blog/server/dart-sass"; do
+for c in "${SRC_DIR}/dart-sass" "${APP_VOL}/@appcenter/hugo-blog/server/dart-sass"; do
     if [ -x "${c}/sass" ]; then
         DART_SASS_DIR="${c}"
         break
